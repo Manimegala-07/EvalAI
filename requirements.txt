@@ -1,0 +1,16 @@
+torch
+sentence-transformers==2.7.0
+transformers==4.41.2
+accelerate==0.30.1
+pandas
+numpy
+scikit-learn
+scipy
+requests
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+requests
+python-jose
+passlib[bcrypt]
