@@ -1,4 +1,4 @@
-from app.db.models import *
+from app.db.models import Test, TestQuestion, Submission, Answer
 
 
 # ---------------- TEST ----------------
@@ -6,8 +6,7 @@ def create_test(db, title, teacher_id, questions):
 
     test = Test(title=title, teacher_id=teacher_id)
     db.add(test)
-    db.flush()
-    
+    db.flush()  # get test.id before commit
 
     for item in questions:
         db.add(
@@ -20,7 +19,7 @@ def create_test(db, title, teacher_id, questions):
 
     db.commit()
     db.refresh(test)
-    
+
     return test.id
 
 
@@ -30,9 +29,8 @@ def create_submission(db, student_id, test_id):
     submission = Submission(
         student_id=student_id,
         test_id=test_id,
-        total_minilm=0,
-        total_hybrid=0,
-        status="pending"
+        total_score=0,
+        status="evaluated"   # auto evaluation system
     )
 
     db.add(submission)
@@ -43,22 +41,44 @@ def create_submission(db, student_id, test_id):
 
 
 # ---------------- ANSWERS ----------------
-def save_answer(db, submission_id, question_id, answer, score, feedback):
+def save_answer(
+    db,
+    submission_id,
+    question_id,
+    student_answer,
+    score,
+    similarity,
+    entailment,
+    coverage,
+    length_ratio,
+    confidence,
+    feedback,
+    concept_data
+):
 
-    db.add(Answer(
+    answer = Answer(
         submission_id=submission_id,
         question_id=question_id,
-        student_answer=answer,
+        student_answer=student_answer,
         score=score,
-        feedback=feedback
-    ))
+        similarity=similarity,
+        entailment=entailment,
+        coverage=coverage,
+        length_ratio=length_ratio,
+        confidence=confidence,
+        feedback=feedback,
+        concept_data=concept_data
+    )
+
+    db.add(answer)
 
 
 # ---------------- RESULTS ----------------
 def get_test_results(db, test_id):
 
     return db.query(Answer).join(Submission)\
-        .filter(Submission.test_id == test_id).all()
+        .filter(Submission.test_id == test_id)\
+        .all()
 
 
 # ---------------- ANALYTICS ----------------
@@ -67,6 +87,9 @@ def get_test_analytics(db, test_id):
     submissions = db.query(Submission)\
         .filter(Submission.test_id == test_id)\
         .all()
+
+    if not submissions:
+        return {}
 
     student_totals = {}
     question_scores = {}
@@ -85,16 +108,17 @@ def get_test_analytics(db, test_id):
 
         student_totals[sub.student_id] = total
 
-    if not student_totals:
-        return {}
-
     scores = list(student_totals.values())
 
     return {
         "average_score": round(sum(scores) / len(scores), 2),
         "highest_score": max(scores),
         "lowest_score": min(scores),
-        "student_ranking": sorted(student_totals.items(), key=lambda x: x[1], reverse=True),
+        "student_ranking": sorted(
+            student_totals.items(),
+            key=lambda x: x[1],
+            reverse=True
+        ),
         "question_performance": {
             qid: round(sum(vals) / len(vals), 2)
             for qid, vals in question_scores.items()

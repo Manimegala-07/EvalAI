@@ -6,6 +6,9 @@ from app.api import auth_routes
 from app.api import analytics_routes
 from app.api import report_routes
 from app.api import  analytics_routes
+from app.api import dashboard_routes
+from app.api import scoring_debug
+from app.api import moodle_routes
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -29,3 +32,6 @@ app.include_router(question_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(analytics_routes.router)
 app.include_router(report_routes.router)
+app.include_router(dashboard_routes.router)
+app.include_router(scoring_debug.router)
+app.include_router(moodle_routes.router)

@@ -3,15 +3,19 @@ from app.db.models import User
 from app.auth.security import hash_password, verify_password
 
 
-def register_user(name, email, password, role):
+def register_user(name, email, password, role, institution=None, db=None):
 
-    db = SessionLocal()
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
 
     user = User(
         name=name,
         email=email,
         password=hash_password(password),
-        role=role
+        role=role,
+        institution=institution
     )
 
     db.add(user)
@@ -19,20 +23,26 @@ def register_user(name, email, password, role):
     db.refresh(user)
 
     user_id = user.id
-    db.close()
+
+    if close_db:
+        db.close()
 
     return user_id
 
 
-def authenticate_user(email, password):
+def authenticate_user(email, password, db=None):
 
-    db = SessionLocal()
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
 
     user = db.query(User)\
         .filter(User.email == email)\
         .first()
 
-    db.close()
+    if close_db:
+        db.close()
 
     if not user:
         return None

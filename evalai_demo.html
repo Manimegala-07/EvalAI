@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvalAI — Pipeline Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0e1a;
+    --bg2:      #0f1525;
+    --bg3:      #151d33;
+    --border:   #1e2d4d;
+    --accent:   #2d5be3;
+    --accent2:  #4f7cff;
+    --glow:     rgba(45,91,227,0.25);
+    --green:    #10d98a;
+    --red:      #ff4d6d;
+    --amber:    #fbbf24;
+    --purple:   #a78bfa;
+    --text:     #e2e8f8;
+    --muted:    #6b7fa8;
+    --card:     #111827;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid bg ── */
+  body::before {
+    content:'';
+    position:fixed;
+    inset:0;
+    background-image:
+      linear-gradient(rgba(45,91,227,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(45,91,227,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .wrap { position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:0 24px 80px; }
+
+  /* ── Header ── */
+  header {
+    padding: 48px 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .logo-mark {
+    width: 52px; height: 52px;
+    background: var(--accent);
+    border-radius: 14px;
+    display: grid; place-items: center;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700; font-size: 20px;
+    box-shadow: 0 0 30px var(--glow);
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+  header p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .badge {
+    margin-left: auto;
+    background: rgba(16,217,138,0.12);
+    color: var(--green);
+    border: 1px solid rgba(16,217,138,0.3);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .badge::before { content:'●'; font-size: 8px; }
+
+  /* ── Input Section ── */
+  .input-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    margin-bottom: 32px;
+  }
+  .input-card h2 {
+    font-size: 14px;
+    font-family: 'Space Mono', monospace;
+    color: var(--accent2);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 24px;
+  }
+  .input-grid { display: grid; gap: 16px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .field textarea, .field input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+  }
+  .field textarea:focus, .field input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--glow);
+  }
+  .field textarea { min-height: 90px; }
+
+  .presets {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .preset-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .preset-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .run-btn {
+    width: 100%;
+    margin-top: 20px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 16px;
+    font-family: 'Sora', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .run-btn:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 8px 24px var(--glow); }
+  .run-btn:active { transform: translateY(0); }
+  .run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* ── Pipeline ── */
+  .pipeline-label {
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+  }
+
+  .stages { display: flex; flex-direction: column; gap: 0; }
+
+  .stage {
+    position: relative;
+    opacity: 0.3;
+    transition: opacity 0.4s;
+  }
+  .stage.active { opacity: 1; }
+  .stage.done { opacity: 1; }
+
+  .stage-connector {
+    width: 2px;
+    height: 24px;
+    background: var(--border);
+    margin-left: 27px;
+    transition: background 0.4s;
+  }
+  .stage.done + .stage-connector { background: var(--accent); }
+
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+  }
+  .stage-num {
+    width: 56px; height: 56px;
+    border-radius: 16px;
+    border: 2px solid var(--border);
+    display: grid; place-items: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    background: var(--bg2);
+    transition: all 0.3s;
+    flex-shrink: 0;
+  }
+  .stage.active .stage-num {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 20px var(--glow);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  .stage.done .stage-num {
+    border-color: var(--green);
+    background: rgba(16,217,138,0.1);
+    color: var(--green);
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 20px var(--glow); }
+    50% { box-shadow: 0 0 35px rgba(45,91,227,0.45); }
+  }
+
+  .stage-meta { flex: 1; }
+  .stage-title { font-size: 16px; font-weight: 700; }
+  .stage-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .stage-time {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--green);
+  }
+
+  .stage-body {
+    margin: 12px 0 0 72px;
+    display: none;
+  }
+  .stage.done .stage-body { display: block; }
+
+  /* ── Output blocks ── */
+  .out-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .out-card h4 {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+
+  .token-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .token {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+  }
+
+  .sentence-list { display: flex; flex-direction: column; gap: 8px; }
+  .sentence-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg3);
+    border-radius: 10px;
+    border-left: 3px solid var(--accent);
+  }
+  .sent-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .sent-text { line-height: 1.5; }
+
+  .idf-table { width: 100%; border-collapse: collapse; }
+  .idf-table th {
+    text-align: left;
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .idf-table td {
+    padding: 7px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(30,45,77,0.5);
+  }
+  .idf-table tr:hover td { background: var(--bg3); }
+  .idf-val { color: var(--amber); }
+  .idf-bar-wrap { height: 4px; background: var(--bg3); border-radius: 2px; width: 120px; }
+  .idf-bar { height: 4px; background: var(--amber); border-radius: 2px; }
+
+  .matrix-scroll { overflow-x: auto; }
+  .matrix-table { border-collapse: collapse; font-family: 'Space Mono', monospace; font-size: 10px; }
+  .matrix-table th, .matrix-table td {
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    text-align: center;
+    min-width: 60px;
+  }
+  .matrix-table th { background: var(--bg3); color: var(--muted); }
+  .cell-high { background: rgba(16,217,138,0.2); color: var(--green); font-weight: 700; }
+  .cell-mid  { background: rgba(251,191,36,0.12); color: var(--amber); }
+  .cell-low  { color: var(--muted); }
+
+  .concept-list { display: flex; flex-direction: column; gap: 10px; }
+  .concept-item {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .concept-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg3);
+  }
+  .concept-status {
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .s-matched { background: rgba(16,217,138,0.15); color: var(--green); border: 1px solid rgba(16,217,138,0.3); }
+  .s-partial  { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
+  .s-missing  { background: rgba(255,77,109,0.12); color: var(--red); border: 1px solid rgba(255,77,109,0.3); }
+  .s-wrong    { background: rgba(167,139,250,0.12); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+  .concept-text { font-size: 12px; flex: 1; line-height: 1.4; }
+  .concept-cov {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .concept-kws {
+    padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .kw-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .kw-matched { background: rgba(16,217,138,0.1); color: var(--green); }
+  .kw-missing { background: rgba(255,77,109,0.1); color: var(--red); }
+
+  .nli-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .nli-dir {
+    background: var(--bg3);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+  .nli-dir h5 {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+  .nli-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .nli-label { font-size: 11px; width: 80px; flex-shrink: 0; }
+  .nli-bar-bg { flex: 1; height: 6px; background: var(--bg2); border-radius: 3px; }
+  .nli-bar-fill { height: 6px; border-radius: 3px; transition: width 0.6s ease; }
+  .bar-ent { background: var(--green); }
+  .bar-neu { background: var(--muted); }
+  .bar-con { background: var(--red); }
+  .nli-pct { font-family: 'Space Mono', monospace; font-size: 11px; width: 38px; text-align: right; }
+
+  .score-reveal {
+    background: linear-gradient(135deg, var(--bg2), var(--bg3));
+    border: 1px solid var(--accent);
+    border-radius: 20px;
+    padding: 32px;
+    text-align: center;
+    box-shadow: 0 0 60px var(--glow);
+    position: relative;
+    overflow: hidden;
+  }
+  .score-reveal::before {
+    content:'';
+    position:absolute;
+    top:-50%; left:-50%;
+    width:200%; height:200%;
+    background: radial-gradient(circle at 50% 50%, rgba(45,91,227,0.06), transparent 60%);
+  }
+  .score-big {
+    font-size: 72px;
+    font-weight: 800;
+    font-family: 'Space Mono', monospace;
+    color: var(--accent2);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .score-label { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+  .score-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    position: relative;
+  }
+  .metric-box {
+    background: var(--bg);
+    border-radius: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+  }
+  .metric-val {
+    font-size: 22px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 4px;
+  }
+  .metric-name { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  .heatmap-list { display: flex; flex-direction: column; gap: 8px; }
+  .heat-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border-left: 3px solid;
+  }
+  .heat-matched { background: rgba(16,217,138,0.07); border-color: var(--green); }
+  .heat-partial  { background: rgba(251,191,36,0.07); border-color: var(--amber); }
+  .heat-wrong    { background: rgba(255,77,109,0.07); border-color: var(--red); }
+  .heat-irrelevant { background: rgba(107,127,168,0.07); border-color: var(--muted); }
+  .heat-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .dot-matched { background: var(--green); }
+  .dot-partial  { background: var(--amber); }
+  .dot-wrong    { background: var(--red); }
+  .dot-irrelevant { background: var(--muted); }
+  .heat-sent { font-size: 12px; line-height: 1.5; flex: 1; }
+  .heat-meta { font-size: 10px; color: var(--muted); margin-top: 3px; font-family: 'Space Mono', monospace; }
+
+  .feedback-box {
+    background: rgba(167,139,250,0.05);
+    border: 1px solid rgba(167,139,250,0.2);
+    border-radius: 14px;
+    padding: 20px;
+    line-height: 1.7;
+    font-size: 14px;
+    color: #c4b5fd;
+  }
+
+  /* ── Progress bar top ── */
+  .progress-track {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 28px;
+  }
+  .progress-seg {
+    height: 3px;
+    flex: 1;
+    background: var(--border);
+    border-radius: 2px;
+    transition: background 0.4s;
+  }
+  .progress-seg.filled { background: var(--accent); }
+  .progress-seg.active { background: var(--accent2); animation: shimmer 1s linear infinite; }
+  @keyframes shimmer {
+    0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; }
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .err-box {
+    background: rgba(255,77,109,0.08);
+    border: 1px solid rgba(255,77,109,0.3);
+    border-radius: 12px;
+    padding: 16px 20px;
+    color: var(--red);
+    font-size: 13px;
+    margin-top: 16px;
+  }
+
+  /* API config */
+  .api-row {
+    display: flex; gap: 10px; align-items: flex-end;
+  }
+  .api-row .field { flex: 1; }
+  .api-row input { padding: 12px 14px; border-radius: 10px; }
+
+  @media (max-width: 600px) {
+    .score-metrics { grid-template-columns: repeat(2, 1fr); }
+    .nli-grid { grid-template-columns: 1fr; }
+    header { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo-mark">E</div>
+    <div>
+      <h1>EvalAI Pipeline Visualizer</h1>
+      <p>Step-by-step intermediate outputs of the AI scoring engine</p>
+    </div>
+    <div class="badge">LIVE DEMO</div>
+  </header>
+
+  <!-- Input Card -->
+  <div class="input-card">
+    <h2>// Input</h2>
+    <div class="presets">
+      <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:4px;">Load preset:</span>
+      <button class="preset-btn" onclick="loadPreset(0)">Stack Memory</button>
+      <button class="preset-btn" onclick="loadPreset(1)">Photosynthesis</button>
+      <button class="preset-btn" onclick="loadPreset(2)">TCP/IP</button>
+    </div>
+    <div class="input-grid">
+      <div class="field">
+        <label>Question</label>
+        <textarea id="inp-question" rows="2" placeholder="Enter the exam question..."></textarea>
+      </div>
+      <div class="field">
+        <label>Model Answer (Reference)</label>
+        <textarea id="inp-ref" rows="4" placeholder="Enter the teacher's model answer..."></textarea>
+      </div>
+      <div class="field">
+        <label>Student Answer</label>
+        <textarea id="inp-student" rows="4" placeholder="Enter the student's answer to evaluate..."></textarea>
+      </div>
+      <div class="api-row">
+        <div class="field">
+          <label>Max Score</label>
+          <input type="number" id="inp-max" value="10" min="1" max="100">
+        </div>
+        <div class="field" style="flex:3">
+          <label>Backend URL</label>
+          <input type="text" id="inp-api" value="http://localhost:8000" placeholder="http://localhost:8000">
+        </div>
+      </div>
+    </div>
+    <button class="run-btn" id="run-btn" onclick="runPipeline()">
+      ▶ &nbsp; Run Pipeline
+    </button>
+    <div class="err-box" id="err-box" style="display:none"></div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-track" id="progress-track">
+    <div class="progress-seg" id="seg0"></div>
+    <div class="progress-seg" id="seg1"></div>
+    <div class="progress-seg" id="seg2"></div>
+    <div class="progress-seg" id="seg3"></div>
+    <div class="progress-seg" id="seg4"></div>
+    <div class="progress-seg" id="seg5"></div>
+    <div class="progress-seg" id="seg6"></div>
+  </div>
+
+  <!-- Pipeline Stages -->
+  <div class="pipeline-label">// Pipeline Stages</div>
+  <div class="stages" id="stages">
+
+    <!-- Stage 1: Tokenization -->
+    <div class="stage" id="stage-0">
+      <div class="stage-header" onclick="toggleStage(0)">
+        <div class="stage-num" id="snum-0">01</div>
+        <div class="stage-meta">
+          <div class="stage-title">Tokenization & Stopword Removal</div>
+          <div class="stage-sub">Lowercasing → punctuation removal → stopword filter → content words</div>
+        </div>
+        <div class="stage-time" id="stime-0"></div>
+      </div>
+      <div class="stage-body" id="sbody-0"></div>
+    </div>
+    <div class="stage-connector"></div>
+
+    <!-- Stage 2: Sentence Extraction -->
+    <div class="stage" id="stage-1">
+      <div class="stage-header" onclick="toggleStage(1)">
+        <div class="stage-num" id="snum-1">02</div>
+        <div class="stage-meta">
+          <div class="stage-title">Sentence Extraction</div>
+          <div class="stage-sub">Robust multi-pass splitter → concept unit segmentation</div>
+        </div>
+        <div class="stage-time" id="stime-1"></div>
+      </div>
+      <div class="stage-body" id="sbody-1"></div>
+    </div>
+    <div class="stage-connector"></div>
+
+    <!-- Stage 3: IDF Weights -->
+    <div class="stage" id="stage-2">
+      <div class="stage-header" onclick="toggleStage(2)">
+        <div class="stage-num" id="snum-2">03</div>
+        <div class="stage-meta">
+          <div class="stage-title">IDF Weight Construction</div>
+          <div class="stage-sub">Domain-specific term weighting from reference sentences</div>
+        </div>
+        <div class="stage-time" id="stime-2"></div>
+      </div>
+      <div class="stage-body" id="sbody-2"></div>
+    </div>
+    <div class="stage-connector"></div>
+
+    <!-- Stage 4: Concept Coverage -->
+    <div class="stage" id="stage-3">
+      <div class="stage-header" onclick="toggleStage(3)">
+        <div class="stage-num" id="snum-3">04</div>
+        <div class="stage-meta">
+          <div class="stage-title">IDF-Weighted Concept Coverage</div>
+          <div class="stage-sub">Semantic keyword matching → coverage per concept → NLI contradiction check</div>
+        </div>
+        <div class="stage-time" id="stime-3"></div>
+      </div>
+      <div class="stage-body" id="sbody-3"></div>
+    </div>
+    <div class="stage-connector"></div>
+
+    <!-- Stage 5: NLI -->
+    <div class="stage" id="stage-4">
+      <div class="stage-header" onclick="toggleStage(4)">
+        <div class="stage-num" id="snum-4">05</div>
+        <div class="stage-meta">
+          <div class="stage-title">Bidirectional NLI (DeBERTa)</div>
+          <div class="stage-sub">Forward + backward entailment / contradiction scoring</div>
+        </div>
+        <div class="stage-time" id="stime-4"></div>
+      </div>
+      <div class="stage-body" id="sbody-4"></div>
+    </div>
+    <div class="stage-connector"></div>
+
+    <!-- Stage 6: Sentence Heatmap -->
+    <div class="stage" id="stage-5">
+      <div class="stage-header" onclick="toggleStage(5)">
+        <div class="stage-num" id="snum-5">06</div>
+        <div class="stage-meta">
+          <div class="stage-title">Sentence Heatmap Generation</div>
+          <div class="stage-sub">Per-sentence relevance & accuracy classification</div>
+        </div>
+        <div class="stage-time" id="stime-5"></div>
+      </div>
+      <div class="stage-body" id="sbody-5"></div>
+    </div>
+    <div class="stage-connector"></div>
+
+    <!-- Stage 7: Final Score -->
+    <div class="stage" id="stage-6">
+      <div class="stage-header" onclick="toggleStage(6)">
+        <div class="stage-num" id="snum-6">07</div>
+        <div class="stage-meta">
+          <div class="stage-title">Final Score & Feedback</div>
+          <div class="stage-sub">Weighted formula → penalties → Gemini feedback</div>
+        </div>
+        <div class="stage-time" id="stime-6"></div>
+      </div>
+      <div class="stage-body" id="sbody-6"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Presets ───────────────────────────────────────────────────
+const PRESETS = [
+  {
+    question: "Explain how a stack data structure works and its operations.",
+    ref: "A stack is a linear data structure that follows the Last In First Out (LIFO) principle. Elements are added and removed from the same end called the top of the stack. The primary operations are push, which adds an element to the top, and pop, which removes the top element. The peek operation returns the top element without removing it. Stacks are used in function call management, expression evaluation, and backtracking algorithms.",
+    student: "A stack stores data using LIFO which means last in first out. You can push elements to add them and pop to remove the topmost item. It is used in recursion and undo operations in applications.",
+    max: 10
+  },
+  {
+    question: "Describe the process of photosynthesis in plants.",
+    ref: "Photosynthesis is the process by which green plants convert sunlight into food using chlorophyll. The process occurs in two stages: the light-dependent reactions in the thylakoid membranes and the Calvin cycle in the stroma. Water molecules are split to release oxygen as a byproduct. Carbon dioxide from the air is fixed into glucose using ATP and NADPH produced in the light reactions.",
+    student: "Photosynthesis happens in the chloroplast. Plants use sunlight and carbon dioxide to produce glucose. Oxygen is released as a byproduct. The reaction uses chlorophyll to absorb light energy.",
+    max: 10
+  },
+  {
+    question: "What is the TCP/IP model and how does it enable internet communication?",
+    ref: "The TCP/IP model is a four-layer conceptual framework that governs how data is transmitted over the internet. The layers are: Application layer handling protocols like HTTP and FTP, Transport layer managing end-to-end communication using TCP and UDP, Internet layer responsible for logical addressing and routing using IP, and Network Access layer handling physical data transmission. Data is encapsulated as it travels down the layers and decapsulated as it moves up on the receiving side.",
+    student: "TCP/IP is a network model with layers. It has the application layer, transport layer using TCP, the internet layer using IP addresses for routing, and the physical layer. Data moves through each layer with headers added at each step.",
+    max: 10
+  }
+];
+
+function loadPreset(i) {
+  const p = PRESETS[i];
+  document.getElementById('inp-question').value = p.question;
+  document.getElementById('inp-ref').value = p.ref;
+  document.getElementById('inp-student').value = p.student;
+  document.getElementById('inp-max').value = p.max;
+}
+
+// ── Toggle stage body ─────────────────────────────────────────
+function toggleStage(i) {
+  const body = document.getElementById(`sbody-${i}`);
+  if (document.getElementById(`stage-${i}`).classList.contains('done')) {
+    body.style.display = body.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+// ── Pipeline runner ───────────────────────────────────────────
+let stageTimers = {};
+
+function setStageActive(i) {
+  document.getElementById(`stage-${i}`).classList.add('active');
+  document.getElementById(`seg${i}`).classList.add('active');
+  stageTimers[i] = performance.now();
+}
+
+function setStageComplete(i, body) {
+  const el = document.getElementById(`stage-${i}`);
+  el.classList.remove('active');
+  el.classList.add('done');
+  document.getElementById(`seg${i}`).classList.remove('active');
+  document.getElementById(`seg${i}`).classList.add('filled');
+  const elapsed = ((performance.now() - stageTimers[i]) / 1000).toFixed(2);
+  document.getElementById(`stime-${i}`).textContent = `${elapsed}s`;
+  document.getElementById(`sbody-${i}`).innerHTML = body;
+}
+
+function resetAll() {
+  for (let i = 0; i < 7; i++) {
+    const el = document.getElementById(`stage-${i}`);
+    el.classList.remove('active', 'done');
+    document.getElementById(`seg${i}`).classList.remove('active', 'filled');
+    document.getElementById(`stime-${i}`).textContent = '';
+    document.getElementById(`sbody-${i}`).innerHTML = '';
+    document.getElementById(`sbody-${i}`).style.display = 'block';
+  }
+  document.getElementById('err-box').style.display = 'none';
+}
+
+function showErr(msg) {
+  const box = document.getElementById('err-box');
+  box.textContent = '⚠ ' + msg;
+  box.style.display = 'block';
+}
+
+// ── Simple local tokenizer to show stage 1 immediately ───────
+const STOPWORDS = new Set(['a','an','the','is','are','was','were','be','been','being','have','has','had',
+  'do','does','did','will','would','could','should','may','might','shall','can','it','its',
+  'this','that','these','those','i','we','you','he','she','they','what','which','who',
+  'when','where','why','how','all','both','each','few','more','most','other','some',
+  'such','no','nor','not','only','own','same','so','than','too','very','just','but',
+  'and','or','in','on','at','to','for','of','with','by','from','as','into','through',
+  'about','between','during','without','before','after','then','also','per','used','while',
+  'their','there','here','up','down','out','off','over','under']);
+
+function localTokenize(text) {
+  return text.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 2 && !STOPWORDS.has(t));
+}
+
+function localExtractSentences(text) {
+  // Simple splitter for demo
+  return text.split(/(?<=[.!?])\s+(?=[A-Z])/).filter(s => s.trim().split(' ').length >= 4);
+}
+
+// IDF computation
+function computeIDF(ref) {
+  const sentences = localExtractSentences(ref);
+  if (sentences.length < 2) {
+    const tokens = localTokenize(ref);
+    const freq = {};
+    tokens.forEach(t => freq[t] = (freq[t]||0)+1);
+    const total = Math.max(tokens.length, 1);
+    const idf = {};
+    Object.entries(freq).forEach(([t,f]) => idf[t] = Math.log(total/f+1)+1);
+    return idf;
+  }
+  const N = sentences.length;
+  const df = {};
+  sentences.forEach(s => {
+    new Set(localTokenize(s)).forEach(t => df[t] = (df[t]||0)+1);
+  });
+  const idf = {};
+  Object.entries(df).forEach(([t,f]) => idf[t] = Math.log((N+1)/(f+1))+1);
+  return idf;
+}
+
+// Simple cosine similarity (bag of words) for keyword matching demo
+function simpleCosSim(a, b) {
+  const tokA = new Set(localTokenize(a));
+  const tokB = new Set(localTokenize(b));
+  const inter = [...tokA].filter(t => tokB.has(t)).length;
+  return inter / Math.sqrt(tokA.size * tokB.size) || 0;
+}
+
+// ── Main pipeline ─────────────────────────────────────────────
+async function runPipeline() {
+  const question = document.getElementById('inp-question').value.trim();
+  const ref      = document.getElementById('inp-ref').value.trim();
+  const student  = document.getElementById('inp-student').value.trim();
+  const maxScore = parseFloat(document.getElementById('inp-max').value) || 10;
+  const apiBase  = document.getElementById('inp-api').value.trim().replace(/\/$/, '');
+
+  if (!ref || !student) { showErr("Please fill in Model Answer and Student Answer."); return; }
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Processing...';
+  resetAll();
+
+  const t0 = performance.now();
+
+  // ── STAGE 1: Tokenization (local, instant) ─────────────────
+  setStageActive(0);
+  await delay(300);
+
+  const refTokens = localTokenize(ref);
+  const stuTokens = localTokenize(student);
+
+  setStageComplete(0, `
+    <div class="out-card">
+      <h4>Reference Tokens (${refTokens.length} content words)</h4>
+      <div class="token-list">${refTokens.map(t => `<span class="token">${t}</span>`).join('')}</div>
+    </div>
+    <div class="out-card">
+      <h4>Student Tokens (${stuTokens.length} content words)</h4>
+      <div class="token-list">${stuTokens.map(t => `<span class="token" style="border-color:rgba(79,124,255,0.4)">${t}</span>`).join('')}</div>
+    </div>
+  `);
+
+  // ── STAGE 2: Sentence Extraction (local) ───────────────────
+  setStageActive(1);
+  await delay(350);
+
+  const refSents = localExtractSentences(ref);
+  const stuSents = localExtractSentences(student);
+
+  setStageComplete(1, `
+    <div class="out-card">
+      <h4>Reference Sentences → ${refSents.length} concept units extracted</h4>
+      <div class="sentence-list">
+        ${refSents.map((s,i) => `
+          <div class="sentence-item">
+            <span class="sent-num">S${i+1}</span>
+            <span class="sent-text">${esc(s)}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="out-card" style="margin-top:12px">
+      <h4>Student Sentences → ${stuSents.length} sentences for heatmap</h4>
+      <div class="sentence-list">
+        ${stuSents.map((s,i) => `
+          <div class="sentence-item" style="border-left-color:var(--accent2)">
+            <span class="sent-num">S${i+1}</span>
+            <span class="sent-text">${esc(s)}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+  `);
+
+  // ── STAGE 3: IDF Weights (local) ──────────────────────────
+  setStageActive(2);
+  await delay(400);
+
+  const idf = computeIDF(ref);
+  const sorted = Object.entries(idf).sort((a,b)=>b[1]-a[1]).slice(0, 20);
+  const maxIDF = sorted[0]?.[1] || 1;
+
+  setStageComplete(2, `
+    <div class="out-card">
+      <h4>Top IDF-weighted terms from reference (higher = more domain-specific)</h4>
+      <table class="idf-table">
+        <thead>
+          <tr><th>Term</th><th>IDF Weight</th><th>Importance</th></tr>
+        </thead>
+        <tbody>
+          ${sorted.map(([term, val]) => `
+            <tr>
+              <td style="color:var(--text);font-weight:600">${term}</td>
+              <td class="idf-val">${val.toFixed(3)}</td>
+              <td>
+                <div class="idf-bar-wrap">
+                  <div class="idf-bar" style="width:${(val/maxIDF*100).toFixed(1)}%"></div>
+                </div>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `);
+
+  // ── STAGE 4-7: Call backend API ────────────────────────────
+  setStageActive(3);
+
+  let result;
+  try {
+    // We'll use the scoring endpoint — try direct scoring endpoint
+    // Fallback: simulate with local computation for demo
+    result = await callBackend(apiBase, ref, student, maxScore);
+  } catch(e) {
+    // Fallback to local simulation if backend unreachable
+    result = localSimulate(ref, student, maxScore, idf, refSents, stuSents, refTokens, stuTokens);
+    showErr(`Backend unreachable (${e.message}). Showing local simulation.`);
+  }
+
+  // ── STAGE 4: Concept Coverage ──────────────────────────────
+  const conceptResults = result.concept_results || [];
+  setStageComplete(3, `
+    <div class="out-card">
+      <h4>${conceptResults.length} concepts analysed — coverage + NLI contradiction check</h4>
+      <div class="concept-list">
+        ${conceptResults.map(c => {
+          const statusClass = `s-${c.status}`;
+          const covered = c.covered_kws || [];
+          const missing = c.missing_kws || [];
+          return `
+          <div class="concept-item">
+            <div class="concept-top">
+              <span class="concept-status ${statusClass}">${c.status.toUpperCase()}</span>
+              <span class="concept-text">${esc(c.concept)}</span>
+              <span class="concept-cov">${(c.coverage*100).toFixed(0)}%</span>
+            </div>
+            ${(covered.length || missing.length) ? `
+            <div class="concept-kws">
+              ${covered.map(k => `<span class="kw-tag kw-matched">✓ ${k.keyword||k}</span>`).join('')}
+              ${missing.map(k => `<span class="kw-tag kw-missing">✗ ${k.keyword||k}</span>`).join('')}
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `);
+
+  // ── STAGE 5: NLI ──────────────────────────────────────────
+  setStageActive(4);
+  await delay(200);
+  const nli = result.nli || { forward_ent: result.entailment||0, forward_neu: 0.3, forward_con: 0.1, backward_ent: result.entailment*0.8||0, backward_neu: 0.3, backward_con: 0.1 };
+
+  setStageComplete(4, `
+    <div class="out-card">
+      <h4>Bidirectional DeBERTa NLI scores</h4>
+      <div class="nli-grid">
+        <div class="nli-dir">
+          <h5>Forward → (Ref ⊢ Student)</h5>
+          <div class="nli-bar-row">
+            <span class="nli-label" style="color:var(--green)">Entailment</span>
+            <div class="nli-bar-bg"><div class="nli-bar-fill bar-ent" style="width:${((nli.forward_ent||0)*100).toFixed(0)}%"></div></div>
+            <span class="nli-pct" style="color:var(--green)">${((nli.forward_ent||0)*100).toFixed(1)}%</span>
+          </div>
+          <div class="nli-bar-row">
+            <span class="nli-label" style="color:var(--muted)">Neutral</span>
+            <div class="nli-bar-bg"><div class="nli-bar-fill bar-neu" style="width:${((nli.forward_neu||0)*100).toFixed(0)}%"></div></div>
+            <span class="nli-pct">${((nli.forward_neu||0)*100).toFixed(1)}%</span>
+          </div>
+          <div class="nli-bar-row">
+            <span class="nli-label" style="color:var(--red)">Contradiction</span>
+            <div class="nli-bar-bg"><div class="nli-bar-fill bar-con" style="width:${((nli.forward_con||0)*100).toFixed(0)}%"></div></div>
+            <span class="nli-pct" style="color:var(--red)">${((nli.forward_con||0)*100).toFixed(1)}%</span>
+          </div>
+        </div>
+        <div class="nli-dir">
+          <h5>Backward ← (Student ⊢ Ref)</h5>
+          <div class="nli-bar-row">
+            <span class="nli-label" style="color:var(--green)">Entailment</span>
+            <div class="nli-bar-bg"><div class="nli-bar-fill bar-ent" style="width:${((nli.backward_ent||0)*100).toFixed(0)}%"></div></div>
+            <span class="nli-pct" style="color:var(--green)">${((nli.backward_ent||0)*100).toFixed(1)}%</span>
+          </div>
+          <div class="nli-bar-row">
+            <span class="nli-label" style="color:var(--muted)">Neutral</span>
+            <div class="nli-bar-bg"><div class="nli-bar-fill bar-neu" style="width:${((nli.backward_neu||0)*100).toFixed(0)}%"></div></div>
+            <span class="nli-pct">${((nli.backward_neu||0)*100).toFixed(1)}%</span>
+          </div>
+          <div class="nli-bar-row">
+            <span class="nli-label" style="color:var(--red)">Contradiction</span>
+            <div class="nli-bar-bg"><div class="nli-bar-fill bar-con" style="width:${((nli.backward_con||0)*100).toFixed(0)}%"></div></div>
+            <span class="nli-pct" style="color:var(--red)">${((nli.backward_con||0)*100).toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:10px 14px;background:var(--bg3);border-radius:10px;font-size:12px;color:var(--muted)">
+        <span style="color:var(--text)">NLI Score</span> = 0.60 × ${((nli.forward_ent||0)*100).toFixed(1)}% + 0.40 × ${((nli.backward_ent||0)*100).toFixed(1)}%
+        = <span style="color:var(--accent2);font-family:'Space Mono',monospace">${((0.6*(nli.forward_ent||0)+0.4*(nli.backward_ent||0))*100).toFixed(1)}%</span>
+      </div>
+    </div>
+  `);
+
+  // ── STAGE 6: Sentence Heatmap ──────────────────────────────
+  setStageActive(5);
+  await delay(200);
+  const heatmap = result.sentence_heatmap || [];
+
+  const dotClass = s => ({ matched:'dot-matched', partial:'dot-partial', wrong:'dot-wrong', irrelevant:'dot-irrelevant' }[s]||'dot-irrelevant');
+  const heatClass = s => ({ matched:'heat-matched', partial:'heat-partial', wrong:'heat-wrong', irrelevant:'heat-irrelevant' }[s]||'heat-irrelevant');
+
+  setStageComplete(5, `
+    <div class="out-card">
+      <h4>Per-sentence classification of student's answer</h4>
+      ${heatmap.length ? `<div class="heatmap-list">
+        ${heatmap.map(h => `
+          <div class="heat-item ${heatClass(h.status)}">
+            <div class="heat-dot ${dotClass(h.status)}"></div>
+            <div>
+              <div class="heat-sent">${esc(h.sentence)}</div>
+              <div class="heat-meta">${h.status.toUpperCase()} · sim: ${(h.similarity*100).toFixed(1)}% · ent: ${(h.entailment*100).toFixed(1)}%</div>
+            </div>
+          </div>`).join('')}
+      </div>` : '<p style="color:var(--muted);font-size:13px">No sentence heatmap data available.</p>'}
+    </div>
+  `);
+
+  // ── STAGE 7: Final Score ───────────────────────────────────
+  setStageActive(6);
+  await delay(200);
+  const score      = result.score || 0;
+  const sim        = result.similarity || 0;
+  const ent        = result.entailment || 0;
+  const cov        = result.coverage || 0;
+  const conf       = result.confidence || 0;
+  const wrongR     = result.wrong_ratio || 0;
+  const lenR       = result.length_ratio || 0;
+  const feedback   = result.feedback || '';
+  const pct        = ((score/maxScore)*100).toFixed(1);
+
+  const scoreColor = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
+  const baseRatio  = (0.47*sim + 0.37*(0.6*ent+0.4*(nli.backward_ent||ent)) + 0.16*cov);
+
+  setStageComplete(6, `
+    <div class="score-reveal">
+      <div class="score-big" style="color:${scoreColor}">${score}</div>
+      <div class="score-label">out of ${maxScore} &nbsp;·&nbsp; ${pct}%</div>
+      <div class="score-metrics">
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--accent2)">${(sim*100).toFixed(1)}%</div>
+          <div class="metric-name">Similarity</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--purple)">${(ent*100).toFixed(1)}%</div>
+          <div class="metric-name">Entailment</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--amber)">${(cov*100).toFixed(1)}%</div>
+          <div class="metric-name">Coverage</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:${scoreColor}">${(conf*100).toFixed(1)}%</div>
+          <div class="metric-name">Confidence</div>
+        </div>
+      </div>
+      <div style="margin-top:16px;background:var(--bg);border-radius:12px;padding:14px;text-align:left;font-size:12px;font-family:'Space Mono',monospace;line-height:1.8;color:var(--muted)">
+        base  = 0.47 × ${(sim*100).toFixed(1)}% + 0.37 × NLI + 0.16 × ${(cov*100).toFixed(1)}% = <span style="color:var(--text)">${(baseRatio*100).toFixed(1)}%</span><br>
+        wrong_penalty = min(${(wrongR*100).toFixed(1)}% × 0.20, 20%) = <span style="color:var(--red)">${(Math.min(wrongR*0.20,0.20)*100).toFixed(1)}%</span><br>
+        length_ratio  = <span style="color:var(--text)">${(lenR*100).toFixed(0)}%</span> ${lenR < 0.20 ? '→ length penalty applied' : '→ no penalty'}<br>
+        final_score   = base × penalties × ${maxScore} = <span style="color:${scoreColor};font-weight:700">${score}</span>
+      </div>
+    </div>
+    ${feedback ? `
+    <div class="out-card" style="margin-top:16px">
+      <h4>🤖 Gemini AI Feedback</h4>
+      <div class="feedback-box">${esc(feedback)}</div>
+    </div>` : ''}
+  `);
+
+  const totalTime = ((performance.now() - t0)/1000).toFixed(2);
+  btn.disabled = false;
+  btn.innerHTML = `✓ Complete (${totalTime}s) — Run Again`;
+}
+
+// ── Backend call ──────────────────────────────────────────────
+async function callBackend(apiBase, ref, student, maxScore) {
+  // Try the scoring debug endpoint
+  const res = await fetch(`${apiBase}/scoring/debug`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reference: ref, student_answer: student, max_score: maxScore })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
+// ── Local simulation (fallback) ───────────────────────────────
+function localSimulate(ref, student, maxScore, idf, refSents, stuSents, refTokens, stuTokens) {
+  const stuSet = new Set(stuTokens);
+  const refSet = new Set(refTokens);
+  const lexOver = [...refSet].filter(t => stuSet.has(t)).length / Math.max(refSet.size, 1);
+
+  // Concept results
+  const concept_results = refSents.map(sent => {
+    const kws = localTokenize(sent);
+    const covered_kws = kws.filter(k => stuSet.has(k) || stuTokens.some(t => t.includes(k) || k.includes(t)));
+    const missing_kws = kws.filter(k => !covered_kws.includes(k));
+    const coverage = covered_kws.length / Math.max(kws.length, 1);
+    const status = coverage >= 0.65 ? 'matched' : coverage >= 0.35 ? 'partial' : 'missing';
+    return {
+      concept: sent, status, coverage,
+      covered_kws: covered_kws.map(k => ({ keyword: k })),
+      missing_kws: missing_kws.map(k => ({ keyword: k }))
+    };
+  });
+
+  const covered = concept_results.filter(c => c.status === 'matched').length;
+  const partial = concept_results.filter(c => c.status === 'partial').length;
+  const avgCov = (covered + partial*0.5) / Math.max(concept_results.length, 1);
+
+  // Rough similarity
+  const sim = Math.min(0.95, lexOver * 1.8 + 0.15);
+  const ent = Math.min(0.9, sim * 0.85);
+  const conf = (sim + ent + avgCov) / 3;
+  const base = 0.47*sim + 0.37*ent + 0.16*avgCov;
+  const score = Math.round(Math.max(0, Math.min(base, 1)) * maxScore * 100) / 100;
+  const lenR = Math.min(student.split(' ').length / Math.max(ref.split(' ').length, 1), 1);
+
+  // Sentence heatmap
+  const sentence_heatmap = stuSents.map(sent => {
+    const overlap = localTokenize(sent).filter(t => refSet.has(t)).length / Math.max(localTokenize(sent).length, 1);
+    const status = overlap >= 0.5 ? 'matched' : overlap >= 0.25 ? 'partial' : 'irrelevant';
+    return { sentence: sent, status, similarity: overlap, entailment: overlap * 0.8 };
+  });
+
+  return {
+    score, similarity: sim, entailment: ent, coverage: avgCov,
+    confidence: conf, wrong_ratio: 0, length_ratio: lenR,
+    concept_results, sentence_heatmap, feedback: '',
+    nli: { forward_ent: ent, forward_neu: 1-ent-0.1, forward_con: 0.1,
+           backward_ent: ent*0.8, backward_neu: 0.3, backward_con: 0.05 }
+  };
+}
+
+// ── Utilities ─────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Load first preset on start
+loadPreset(0);
+</script>
+</body>
+</html>
