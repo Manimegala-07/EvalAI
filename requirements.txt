@@ -11,6 +11,10 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
-requests
 python-jose
 passlib[bcrypt]
+deep-translator
+langdetect
+reportlab
+google-generativeai
+httpx

@@ -8,6 +8,7 @@ from collections import Counter
 from sentence_transformers.util import cos_sim
 from app.services.model_service import ModelService
 from app.services.nli_service import NLIService
+from app.services.translation_service import translate_to_english
 
 
 STOPWORDS = {
@@ -66,7 +67,7 @@ class ScoringService:
 
     def tokenize(self, text):
         text = text.lower()
-        text = re.sub(r'[^a-z0-9\s]', ' ', text)
+        text = re.sub(r'[^\w\s]', ' ', text, flags=re.UNICODE)
         tokens = text.split()
         result = [t for t in tokens if t not in STOPWORDS and len(t) > 2]
         return result
@@ -133,13 +134,19 @@ class ScoringService:
         # ───────────────────────────────────────────────────
 
         if len(sentences) < 2:
-            tokens = self.tokenize(reference)
-            freq = Counter(tokens)
-            total = max(len(tokens), 1)
-            idf = {t: math.log(total / f + 1) + 1 for t, f in freq.items()}
-            print(f"  ⚠️  Fewer than 2 sentences → using token-freq fallback IDF")
-            print(f"  📊 IDF table (top 10): { {k: round(v,3) for k,v in list(idf.items())[:10]} }")
-            return idf
+            # Try splitting on . ; and common conjunctions before full fallback
+            alt = re.split(r'[.;]\s+', reference.strip())
+            alt = [s.strip() for s in alt if len(s.split()) >= 4]
+            if len(alt) >= 2:
+                sentences = alt
+                print(f"  ⚠️  Fewer than 2 sentences from extractor → used punctuation split ({len(sentences)} parts)")
+            else:
+                tokens = self.tokenize(reference)
+                freq = Counter(tokens)
+                total = max(len(tokens), 1)
+                idf = {t: math.log(total / f + 1) + 1 for t, f in freq.items()}
+                print(f"  ⚠️  Fewer than 2 sentences → using token-freq fallback IDF")
+                return idf
 
         N = len(sentences)
         df = Counter()
@@ -180,6 +187,12 @@ class ScoringService:
         # ───────────────────────────────────────────────────
 
         ref_concepts = self.extract_sentences(reference)
+        # fallback: split on punctuation for short/single-sentence references
+        if len(ref_concepts) < 2:
+            alt = [s.strip() for s in re.split(r'[.;]\s+', reference.strip()) if len(s.split()) >= 4]
+            if len(alt) > len(ref_concepts):
+                ref_concepts = alt
+                print(f"  ⚠️  Used punctuation split for concepts → {len(ref_concepts)} concepts")
         if not ref_concepts:
             print("  ❌ No concept sentences extracted from reference — returning empty")
             return [], 0.0, 0.0
@@ -336,10 +349,10 @@ class ScoringService:
                 print(f"       Contradiction: {round(nli['backward_con'],4):.4f}")
                 # ───────────────────────────────────────────
 
-                if nli["forward_con"] > 0.55:
+                if nli["forward_con"] > 0.65:
                     is_wrong = True
                     wrong_count += 1
-                    print(f"  🚨 Concept [{c_idx+1}] flagged as WRONG (contradiction > 0.55)")
+                    print(f"  🚨 Concept [{c_idx+1}] flagged as WRONG (contradiction > 0.65)")
 
             # ── Status assignment ──────────────────────────
             if is_wrong:
@@ -397,11 +410,9 @@ class ScoringService:
         ref_sentences = self.extract_sentences(reference)
         stu_sentences = self.extract_sentences(student)
 
-        # ── DEBUG ──────────────────────────────────────────
         _sep("SENTENCE HEATMAP GENERATION")
         print(f"  📄 Reference sentences : {len(ref_sentences)}")
         print(f"  ✍️  Student sentences  : {len(stu_sentences)}")
-        # ───────────────────────────────────────────────────
 
         if not stu_sentences or not ref_sentences:
             print("  ⚠️  Empty sentences — returning empty heatmap")
@@ -410,55 +421,59 @@ class ScoringService:
         ref_embeddings = self.model.encode(ref_sentences, convert_to_tensor=True)
         stu_embeddings = self.model.encode(stu_sentences, convert_to_tensor=True)
 
+        STATUS_ICON = {"matched": "✅", "partial": "🟡", "irrelevant": "⬜", "wrong": "🚨"}
         heatmap = []
-        for i, stu_sent in enumerate(stu_sentences):
 
+        for i, stu_sent in enumerate(stu_sentences):
             sims = cos_sim(stu_embeddings[i], ref_embeddings)[0]
             best_idx = int(sims.argmax())
             best_sim = float(sims[best_idx])
-            best_ref = ref_sentences[best_idx]
 
-            # ── DEBUG ──────────────────────────────────────
-            print(f"\n  🔷 Student sentence [{i+1}]: \"{stu_sent[:80]}...\"")
-            print(f"     Best matching ref  [{best_idx+1}]: \"{best_ref[:80]}...\"")
-            print(f"     Cosine similarity  : {round(best_sim,4):.4f}")
-            # ───────────────────────────────────────────────
+            print(f"\n  🔷 Student sentence [{i+1}]: \"{stu_sent[:80]}")
+            print(f"     Best sim ref [{best_idx+1}]: sim={round(best_sim,4):.4f}")
 
-            nli = NLIService.bidirectional_full(best_ref, stu_sent)
-            forward_ent = nli["forward_ent"]
-            forward_con = nli["forward_con"]
+            # ── Run NLI against top-2 ref sentences, keep best entailment ──
+            top_k = min(2, len(ref_sentences))
+            top_indices = sims.argsort(descending=True)[:top_k].tolist()
 
-            # ── DEBUG ──────────────────────────────────────
-            print(f"     NLI forward_ent    : {round(forward_ent,4):.4f}")
-            print(f"     NLI forward_con    : {round(forward_con,4):.4f}")
-            # ───────────────────────────────────────────────
+            best_combined_ent = 0.0
+            best_forward_con  = 1.0
 
-            if forward_con > 0.5:
+            for ref_idx in top_indices:
+                nli = NLIService.bidirectional_full(ref_sentences[ref_idx], stu_sent)
+                combined = nli["forward_ent"] * 0.6 + nli["backward_ent"] * 0.4
+                print(f"     NLI vs ref[{ref_idx+1}] → combined_ent={round(combined,4):.4f}  con={round(nli['forward_con'],4):.4f}")
+                if combined > best_combined_ent:
+                    best_combined_ent = combined
+                    best_forward_con  = nli["forward_con"]
+
+            combined_ent = best_combined_ent
+            forward_con  = best_forward_con
+
+            print(f"     → best combined_ent={round(combined_ent,4):.4f}  forward_con={round(forward_con,4):.4f}")
+
+            if best_sim > 0.55 and forward_con > 0.65:
                 status = "wrong"
-            elif best_sim > 0.60 and forward_ent > 0.35:
+            elif best_sim > 0.60 and combined_ent > 0.30:
                 status = "matched"
             elif best_sim > 0.45:
                 status = "partial"
             else:
                 status = "irrelevant"
 
-            STATUS_ICON = {"matched":"✅","partial":"🟡","irrelevant":"⬜","wrong":"🚨"}
-            print(f"     Status             : {STATUS_ICON.get(status,'?')} {status.upper()}")
+            print(f"     Status: {STATUS_ICON.get(status,'?')} {status.upper()}")
 
             heatmap.append({
                 "sentence":   stu_sent,
                 "status":     status,
                 "similarity": round(best_sim, 4),
-                "entailment": round(forward_ent, 4),
+                "entailment": round(combined_ent, 4),
             })
 
-        # ── DEBUG ──────────────────────────────────────────
         _sep("SENTENCE HEATMAP — SUMMARY")
         for r in heatmap:
             icon = STATUS_ICON.get(r['status'], '?')
-            print(f"  {icon} [{r['status']:<10}] sim={r['similarity']:.3f}  "
-                  f"ent={r['entailment']:.3f}  \"{r['sentence'][:60]}...\"")
-        # ───────────────────────────────────────────────────
+            print(f"  {icon} [{r['status']:<10}] sim={r['similarity']:.3f}  ent={r['entailment']:.3f}")
 
         return heatmap
 
@@ -501,31 +516,68 @@ class ScoringService:
     # GRADE SINGLE — MAIN PIPELINE ENTRY POINT
     # ─────────────────────────────────────────────────────────
 
-    def grade_single(self, reference, student, max_score=10):
+    def grade_single(self, reference, student, max_score=5, skip_translation=False):
 
-        # ═════════════════════════════════════════════════════
         _sep("▶▶▶  grade_single() — FULL PIPELINE START")
         print(f"  max_score = {max_score}")
-        # ═════════════════════════════════════════════════════
+        print(f"  skip_translation = {skip_translation}")
 
-        # ── STEP 1: Semantic Similarity ───────────────────
+        # ── LANGUAGE DETECTION & TRANSLATION ─────────────────
+        original_student = student
+
+        if skip_translation:
+            # Tamil/Hindi reference path — both same language, grade directly
+            translation_info = {
+                "translated":      student,
+                "original":        student,
+                "source_language": "Tamil/Hindi",
+                "source_code":     "ta",
+                "was_translated":  False,
+            }
+            student_for_nli     = student
+            student_for_embed   = student
+            student_for_concept = student
+            print(f"\n  🌐 skip_translation=True — grading directly in original language")
+            print(f"     Reference  : {reference[:100]}...")
+            print(f"     Student    : {student[:100]}...")
+
+        else:
+            # English fallback path — translate student answer to English
+            translation_info    = translate_to_english(student)
+            student_for_nli     = translation_info["translated"]
+            student_for_embed   = student_for_nli
+            student_for_concept = student_for_nli
+
+            if translation_info["was_translated"]:
+                print(f"\n  🌐 LANGUAGE DETECTED: {translation_info['source_language']}")
+                print(f"     Original   : {original_student[:100]}...")
+                print(f"     Translated : {student_for_nli[:100]}...")
+            else:
+                print(f"\n  🌐 Language: English (no translation needed)")
+
+        # ── STEP 1: Semantic Similarity ───────────────────────
         _sep("STEP 1 — SEMANTIC SIMILARITY (Sentence Transformer)")
-        print(f"  🧠 Encoding full reference and student answers...")
-
-        ref_emb = self.model.encode([reference], convert_to_tensor=True)
-        stu_emb = self.model.encode([student], convert_to_tensor=True)
+        ref_emb = self.model.encode([reference],         convert_to_tensor=True)
+        stu_emb = self.model.encode([student_for_embed], convert_to_tensor=True)
         similarity = float(cos_sim(ref_emb, stu_emb)[0][0])
+        print(f"  ✅ Cosine similarity (S_sim): {round(similarity,4):.4f}  "
+            f"({round(similarity*100,1)}%)")
 
-        print(f"  📐 Reference embedding shape : {ref_emb.shape}")
-        print(f"  📐 Student  embedding shape  : {stu_emb.shape}")
-        print(f"  ✅ Cosine similarity (S_sim)  : {round(similarity,4):.4f}  "
-              f"({round(similarity*100,1)}%)")
-
-        # ── STEP 2: Global NLI ────────────────────────────
+        # ── STEP 2: Global NLI ────────────────────────────────
         _sep("STEP 2 — GLOBAL BIDIRECTIONAL NLI")
-        print(f"  ⚡ Running DeBERTa NLI on full answer pair...")
+        # Detect if translation happened
+        is_translated = translation_info["was_translated"]
 
-        global_nli   = NLIService.bidirectional_full(reference, student)
+        if is_translated:
+            # Already in English → safe
+            nli_ref = reference
+            nli_stu = student_for_nli
+        else:
+            # Tamil path → force translation ONLY for NLI
+            nli_ref = translate_to_english(reference)["translated"]
+            nli_stu = translate_to_english(student_for_nli)["translated"]
+
+        global_nli = NLIService.bidirectional_full(nli_ref, nli_stu)        
         forward_ent  = global_nli["forward_ent"]
         backward_ent = global_nli["backward_ent"]
         nli_score    = forward_ent * 0.6 + backward_ent * 0.4
@@ -539,76 +591,84 @@ class ScoringService:
         print(f"       Entailment   : {round(global_nli['backward_ent'],4):.4f}")
         print(f"       Neutral      : {round(global_nli['backward_neu'],4):.4f}")
         print(f"       Contradiction: {round(global_nli['backward_con'],4):.4f}")
-        print(f"\n  ✅ Combined NLI score (S_nli)")
-        print(f"     = 0.60×{round(forward_ent,4)} + 0.40×{round(backward_ent,4)}")
-        print(f"     = {round(nli_score,4):.4f}  ({round(nli_score*100,1)}%)")
+        print(f"\n  ✅ NLI score: {round(nli_score,4):.4f}  ({round(nli_score*100,1)}%)")
 
-        # ── STEP 3: Concept Analysis ──────────────────────
+        # ── STEP 3: Concept Analysis ──────────────────────────
         _sep("STEP 3 — IDF-WEIGHTED CONCEPT ANALYSIS")
         concept_results, coverage, wrong_ratio = self.concept_analysis(
-            reference, student
+            reference, student_for_concept
         )
-        print(f"\n  ✅ Returned from concept_analysis:")
-        print(f"     avg_coverage : {coverage}")
-        print(f"     wrong_ratio  : {wrong_ratio}")
+        print(f"  avg_coverage : {coverage}")
+        print(f"  wrong_ratio  : {wrong_ratio}")
 
-        # ── STEP 4: Length + Penalties ────────────────────
+        # ── STEP 4: Length + Penalties ────────────────────────
         _sep("STEP 4 — LENGTH RATIO & PENALTIES")
-        ref_len       = max(len(reference.split()), 1)
-        stu_len       = len(student.split())
-        length_ratio  = min(stu_len / ref_len, 1.0)
+        ref_len      = max(len(reference.split()), 1)
+        stu_len      = len(original_student.split())   # always use original length
+        length_ratio = min(stu_len / ref_len, 1.0)
 
         length_penalty = 0.0
         if length_ratio < 0.20:
             length_penalty = 0.15 * (0.20 - length_ratio) / 0.20
-
         wrong_penalty = min(wrong_ratio * 0.20, 0.20)
 
         print(f"  📏 Reference word count : {ref_len}")
         print(f"  📏 Student  word count  : {stu_len}")
         print(f"  📏 Length ratio         : {round(length_ratio,4):.4f}")
-        print(f"  ⚠️  Length penalty       : {round(length_penalty,4):.4f}  "
-              f"{'(applied — answer too short!)' if length_penalty>0 else '(none)'}")
-        print(f"  ⚠️  Wrong penalty        : {round(wrong_penalty,4):.4f}  "
-              f"{'(applied — wrong concepts found!)' if wrong_penalty>0 else '(none)'}")
+        print(f"  ⚠️  Length penalty : {round(length_penalty,4):.4f}  "
+            f"{'(applied!)' if length_penalty>0 else '(none)'}")
+        print(f"  ⚠️  Wrong penalty  : {round(wrong_penalty,4):.4f}  "
+            f"{'(applied!)' if wrong_penalty>0 else '(none)'}")
 
-        # ── STEP 5: Lexical Overlap ───────────────────────
+        # ── STEP 5: Lexical Overlap ───────────────────────────
         _sep("STEP 5 — LEXICAL OVERLAP (Jaccard)")
         ref_words       = set(reference.lower().split())
-        stu_words       = set(student.lower().split())
+        stu_words       = set(student_for_embed.lower().split())
         lexical_overlap = len(ref_words & stu_words) / max(len(ref_words), 1)
         print(f"  📝 Reference unique words : {len(ref_words)}")
         print(f"  📝 Student  unique words  : {len(stu_words)}")
         print(f"  📝 Common words           : {len(ref_words & stu_words)}")
-        print(f"  ✅ Lexical overlap (Jaccard): {round(lexical_overlap,4):.4f}")
+        print(f"  ✅ Lexical overlap: {round(lexical_overlap,4):.4f}")
 
-        # ── STEP 6: Weighted Score Formula ───────────────
+        # ── STEP 6: Weighted Score Formula ────────────────────
         _sep("STEP 6 — WEIGHTED SCORING FORMULA")
-        base_ratio      = 0.47*similarity + 0.37*nli_score + 0.16*coverage
+
+        # FIX: If strong contradiction detected, penalise similarity too
+        forward_con = global_nli["forward_con"]
+
+        if forward_con > 0.65:
+            # Strong contradiction — answer is factually wrong
+            # Penalise similarity proportional to contradiction strength
+            penalised_similarity = similarity * (1 - forward_con)
+            base_ratio = 0.47*penalised_similarity + 0.37*nli_score + 0.16*coverage
+            print(f"  ⚠️  Contradiction detected ({round(forward_con,4)}) — similarity penalised")
+            print(f"     Original similarity : {round(similarity,4)}")
+            print(f"     Penalised similarity: {round(penalised_similarity,4)}")
+            print(f"  📐 Formula: R = 0.47×{round(penalised_similarity,4)} + 0.37×{round(nli_score,4)} + 0.16×{round(coverage,4)}")
+        else:
+            base_ratio = 0.47*similarity + 0.37*nli_score + 0.16*coverage
+            print(f"  📐 Formula: R = 0.47×S_sim + 0.37×S_nli + 0.16×S_cov")
+            print(f"     = 0.47×{round(similarity,4)} + 0.37×{round(nli_score,4)} + 0.16×{round(coverage,4)}")
+
         penalized_ratio = base_ratio * (1 - wrong_penalty) * (1 - length_penalty)
         final_ratio     = max(0.0, min(penalized_ratio, 1.0))
         final_score     = round(final_ratio * max_score, 2)
 
-        print(f"  📐 Formula: R = 0.47×S_sim + 0.37×S_nli + 0.16×S_cov")
-        print(f"     = 0.47×{round(similarity,4)} + 0.37×{round(nli_score,4)} + 0.16×{round(coverage,4)}")
         print(f"     base_ratio      = {round(base_ratio,4):.4f}")
-        print(f"\n  📐 Applying penalties:")
-        print(f"     × (1 - wrong_penalty)  = × (1 - {round(wrong_penalty,4)}) = × {round(1-wrong_penalty,4)}")
-        print(f"     × (1 - length_penalty) = × (1 - {round(length_penalty,4)}) = × {round(1-length_penalty,4)}")
         print(f"     penalized_ratio = {round(penalized_ratio,4):.4f}")
         print(f"     final_ratio     = {round(final_ratio,4):.4f}  (clamped 0–1)")
         print(f"\n  🏆 FINAL SCORE = {round(final_ratio,4)} × {max_score} = {final_score}")
-
-        # ── STEP 7: Confidence ────────────────────────────
+        
+        # ── STEP 7: Confidence ────────────────────────────────
         confidence = self.compute_confidence(
             similarity, forward_ent, backward_ent,
             coverage, wrong_ratio, length_ratio, lexical_overlap
         )
 
-        # ── STEP 8: Sentence Heatmap ──────────────────────
-        sent_heatmap = self.sentence_heatmap(reference, student)
+        # ── STEP 8: Sentence Heatmap ──────────────────────────
+        # Use student_for_nli — same language as reference when skip_translation=True
+        sent_heatmap = self.sentence_heatmap(reference, student_for_nli)
 
-        # ── FINAL SUMMARY ─────────────────────────────────
         _sep("▶▶▶  grade_single() — PIPELINE COMPLETE")
         print(f"  ┌─────────────────────────────────────────┐")
         print(f"  │  S_sim     (similarity)  = {round(similarity,4):.4f}         │")
@@ -625,12 +685,15 @@ class ScoringService:
             "score":            final_score,
             "similarity":       round(similarity, 4),
             "entailment":       round(forward_ent, 4),
+            "backward_ent":     round(backward_ent, 4),
             "coverage":         round(coverage, 4),
             "length_ratio":     round(length_ratio, 4),
             "wrong_ratio":      round(wrong_ratio, 4),
             "confidence":       confidence,
             "concept_results":  concept_results,
             "sentence_heatmap": sent_heatmap,
+            "translation_info": translation_info,
+            "original_answer":  original_student,
         }
 
     def grade_batch(self, refs, students, max_score=10):

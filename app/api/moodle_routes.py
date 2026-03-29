@@ -7,6 +7,7 @@ Endpoints:
   GET  /moodle/result/{id}  ← Fetch a previously graded result
 """
 
+import os
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -21,9 +22,9 @@ scoring_service = ScoringService()
 # ─── In-memory store for graded results (keyed by submission_id) ───────────
 _results_store: dict = {}
 
-# ─── Moodle connection config ───────────────────────────────────────────────
-MOODLE_URL   = "http://localhost:8080"
-MOODLE_TOKEN = "a0bd6f2722cd81a9fd069c6c9ac4e05f"  # your token
+# ─── Moodle connection config (set via environment variables) ───────────────
+MOODLE_URL   = os.getenv("MOODLE_URL",   "http://localhost:8080")
+MOODLE_TOKEN = os.getenv("MOODLE_TOKEN", "")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

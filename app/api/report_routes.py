@@ -363,9 +363,8 @@ def download_report(
             ("Similarity", ans["similarity"]),
             ("Entailment", ans["entailment"]),
             ("Coverage",   ans["coverage"]),
-            ("Confidence", ans["confidence"]),
         ]
-        col_w = (W - 30) / 4
+        col_w = (W - 30) / 3
         m_cells = []
         for m_label, m_val in metrics:
             mc = GREEN if m_val >= 0.7 else AMBER if m_val >= 0.4 else RED
@@ -376,7 +375,7 @@ def download_report(
                 [Paragraph(m_label, ParagraphStyle("ml", fontName="Helvetica",
                     fontSize=7, textColor=INK_MUTED, alignment=TA_CENTER))],
             ], colWidths=[col_w]))
-        m_row = Table([m_cells], colWidths=[col_w] * 4)
+        m_row = Table([m_cells], colWidths=[col_w] * 3)
         m_row.setStyle(TableStyle([
             ("BACKGROUND",    (0, 0), (-1, -1), CREAM),
             ("TOPPADDING",    (0, 0), (-1, -1), 8),

@@ -205,6 +205,8 @@ def evaluate_test(
     db: Session = Depends(get_db),
 ):
     from app.db.models import Test as TestModel
+    from app.services.translation_service import detect_language
+
     test = db.query(TestModel).filter(
         TestModel.id == test_id,
         TestModel.teacher_id == user.id,
@@ -221,20 +223,20 @@ def evaluate_test(
         return {"message": "No pending submissions", "evaluated_count": 0}
 
     scorer = ScoringService()
-    llm = LLMService()
+    llm    = LLMService()
 
     for sub in submissions:
-        answers = db.query(Answer).filter(
-            Answer.submission_id == sub.id
-        ).all()
-
+        answers    = db.query(Answer).filter(Answer.submission_id == sub.id).all()
         total_score = 0.0
 
         for ans in answers:
-            question = db.query(Question).filter(
-                Question.id == ans.question_id
-            ).first()
+            question = db.query(Question).filter(Question.id == ans.question_id).first()
             if not question:
+                continue
+
+            # skip already graded answers
+            if ans.score and ans.score > 0 and ans.feedback != "Pending evaluation":
+                total_score += ans.score or 0.0
                 continue
 
             mapping = db.query(TestQuestion).filter(
@@ -243,30 +245,54 @@ def evaluate_test(
             ).first()
             max_score = mapping.max_score if mapping else 10
 
-            # Guard against empty answers
             student_text = (ans.student_answer or "").strip()
             if not student_text or len(student_text.split()) < 3:
                 ans.score    = 0.0
                 ans.feedback = "No meaningful answer provided."
                 ans.concept_data = {
                     "covered": [], "partial": [], "missing": [], "wrong": [],
-                    "concept_details": [], "coverage": 0.0, "wrong_ratio": 0.0,
-                    "status": "weak",
+                    "concept_details": [], "coverage": 0.0,
+                    "wrong_ratio": 0.0, "status": "weak",
                 }
                 continue
 
-            # ── Run hybrid pipeline ───────────────────────────
+            # ── Detect student answer language ────────────────
+            lang_info     = detect_language(student_text)
+            detected_lang = lang_info.get("lang_code", "en")
+            ans.detected_language = detected_lang
+
+            print(f"\n  🌐 Detected language: {detected_lang}")
+
+            # ── Pick the right reference answer ───────────────
+            if detected_lang == "ta" and question.model_answer_ta:
+                reference = question.model_answer_ta
+                skip_translation = True
+                print(f"  ✅ Using Tamil reference answer")
+
+            elif detected_lang == "hi" and question.model_answer_hi:
+                reference = question.model_answer_hi
+                skip_translation = True
+                print(f"  ✅ Using Hindi reference answer")
+
+            else:
+                # Fallback — use English reference
+                # multilingual model handles cross-lingual similarity
+                reference = question.model_answer
+                skip_translation = False
+                print(f"  ⚠️  No {detected_lang} reference found → using English reference (multilingual fallback)")
+
+            # ── Grade using matched reference ─────────────────
             result = scorer.grade_single(
-                question.model_answer,
+                reference,       # ← same language as student answer
                 student_text,
                 max_score=max_score,
+                skip_translation = skip_translation,
             )
 
             score           = result["score"]
             concept_results = result["concept_results"]
             total_score    += score
 
-            # ── Categorise concepts ───────────────────────────
             covered = [c["concept"] for c in concept_results if c["status"] == "matched"]
             partial = [c["concept"] for c in concept_results if c["status"] == "partial"]
             missing = [c["concept"] for c in concept_results if c["status"] == "missing"]
@@ -286,70 +312,36 @@ def evaluate_test(
             # ── Gemini feedback ───────────────────────────────
             prompt = f"""
 You are an academic evaluator giving feedback to a student.
-
 Question: {question.text}
 Student Answer: {student_text}
 Score: {score} / {max_score}
-
-Concepts correctly covered:
-{chr(10).join(f'- {c}' for c in covered) or '- None'}
-
-Concepts partially covered:
-{chr(10).join(f'- {c}' for c in partial) or '- None'}
-
-Concepts missing:
-{chr(10).join(f'- {c}' for c in missing) or '- None'}
-
-Concepts answered incorrectly:
-{chr(10).join(f'- {c}' for c in wrong) or '- None'}
-
-Write 3-5 sentences of constructive feedback. Tell the student what they got
-right, what concepts they missed, and specifically how to improve.
-Be encouraging but honest.
+Concepts correctly covered: {chr(10).join(f'- {c}' for c in covered) or '- None'}
+Concepts partially covered: {chr(10).join(f'- {c}' for c in partial) or '- None'}
+Concepts missing: {chr(10).join(f'- {c}' for c in missing) or '- None'}
+Concepts answered incorrectly: {chr(10).join(f'- {c}' for c in wrong) or '- None'}
+Write 3-5 sentences of constructive feedback in the same language as the student answer ({detected_lang}).
+Tell the student what they got right, what they missed, and how to improve.
 """
             try:
                 feedback = llm.model.generate_content(prompt).text
-
             except Exception:
-                # ── Meaningful fallback using actual concept data ──
                 parts = [f"Score: {score}/{max_score}."]
                 if covered:
-                    parts.append(
-                        f"Well done on correctly covering: "
-                        f"{'; '.join(c[:80] for c in covered[:3])}."
-                    )
-                if wrong:
-                    parts.append(
-                        f"Incorrect information detected in: "
-                        f"{'; '.join(c[:80] for c in wrong[:2])}. "
-                        f"Please review these carefully."
-                    )
+                    parts.append(f"Well done on: {'; '.join(c[:80] for c in covered[:3])}.")
                 if missing:
-                    parts.append(
-                        f"Key concepts not addressed: "
-                        f"{'; '.join(c[:80] for c in missing[:3])}."
-                    )
-                if partial:
-                    parts.append(
-                        f"Needs more detail: "
-                        f"{'; '.join(c[:80] for c in partial[:2])}."
-                    )
-                if not any([covered, missing, partial, wrong]):
-                    parts.append(
-                        "Re-evaluate this submission to generate detailed concept feedback."
-                    )
+                    parts.append(f"Key concepts missed: {'; '.join(c[:80] for c in missing[:3])}.")
+                if wrong:
+                    parts.append(f"Incorrect: {'; '.join(c[:80] for c in wrong[:2])}.")
                 feedback = " ".join(parts)
 
-            # ── Save all results ──────────────────────────────
-            ans.score         = score
-            ans.similarity    = result["similarity"]
-            ans.entailment    = result["entailment"]
-            ans.coverage      = result["coverage"]
-            ans.length_ratio  = result["length_ratio"]
-            ans.confidence    = result["confidence"]
-            ans.feedback      = feedback
-
-            ans.concept_data = {
+            ans.score            = score
+            ans.similarity       = result["similarity"]
+            ans.entailment       = result["entailment"]
+            ans.coverage         = result["coverage"]
+            ans.length_ratio     = result["length_ratio"]
+            ans.confidence       = result["confidence"]
+            ans.feedback         = feedback
+            ans.concept_data     = {
                 "covered":         covered,
                 "partial":         partial,
                 "missing":         missing,
@@ -369,8 +361,87 @@ Be encouraging but honest.
         sub.status      = "evaluated"
 
     db.commit()
-
     return {
         "message":         "Batch evaluation completed",
         "evaluated_count": len(submissions),
+    }
+
+# ======================================================
+# TEACHER: OVERRIDE SUBMISSION SCORES
+# ======================================================
+
+@router.post("/{submission_id}/override")
+def override_submission(
+    submission_id: int,
+    data: dict,
+    user=Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    # ── Verify submission exists ──────────────────────────
+    submission = db.query(Submission).filter(
+        Submission.id == submission_id
+    ).first()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    overrides = data.get("overrides", {})
+    answers   = db.query(Answer).filter(
+        Answer.submission_id == submission_id
+    ).all()
+
+    print(f"\n  ✏️  Override request for submission #{submission_id}")
+    print(f"  📋 Overrides received: {overrides}")
+
+    # ── Apply overrides to each answer ───────────────────
+    new_total = 0.0
+    for i, ans in enumerate(answers):
+
+        # Frontend sends either answer.id or index as key
+        override = (
+            overrides.get(str(ans.id)) or
+            overrides.get(str(i))
+        )
+
+        if override and "score" in override:
+            old_score = ans.score
+            new_score = float(override["score"])
+
+            # Clamp to max_score
+            mapping = db.query(TestQuestion).filter(
+                TestQuestion.test_id   == submission.test_id,
+                TestQuestion.question_id == ans.question_id,
+            ).first()
+            max_score = mapping.max_score if mapping else 10
+            new_score = max(0.0, min(new_score, max_score))
+
+            ans.score = new_score
+            print(f"  Q{i+1}: score {old_score} → {new_score} "
+                  f"(reason: {override.get('reason', 'none')})")
+
+        new_total += ans.score or 0.0
+
+    # ── Update submission total ───────────────────────────
+    submission.total_score = round(new_total, 2)
+    db.commit()
+
+    # ── Calculate updated percentage ─────────────────────
+    total_max = 0
+    for ans in answers:
+        mapping = db.query(TestQuestion).filter(
+            TestQuestion.test_id     == submission.test_id,
+            TestQuestion.question_id == ans.question_id,
+        ).first()
+        total_max += mapping.max_score if mapping else 10
+
+    percentage = round(
+        (submission.total_score / total_max) * 100, 2
+    ) if total_max else 0
+
+    print(f"  ✅ New total: {submission.total_score} / {total_max} ({percentage}%)")
+
+    return {
+        "message":     "Override applied successfully",
+        "total_score": submission.total_score,
+        "total_max":   total_max,
+        "percentage":  percentage,
     }

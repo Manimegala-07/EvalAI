@@ -12,7 +12,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 DATA_PATH = os.path.join(BASE_DIR, "data", "clean_training_data.csv")
 MODEL_PATH = os.path.join(BASE_DIR, "models", "score_calibrator.pkl")
 
-scorer = ScoringService(training=True)
+scorer = ScoringService()
 
 
 def train():
@@ -25,15 +25,27 @@ def train():
     for _, row in df.iterrows():
 
         reference = str(row["question"]) + " " + str(row["model_answer"])
-        student = str(row["student_answer"])
+        student   = str(row["student_answer"])
 
         result = scorer.grade_batch([reference], [student], 10)[0]
 
+        ref_words     = set(reference.lower().split())
+        stu_words     = set(student.lower().split())
+        lex_overlap   = len(ref_words & stu_words) / max(len(ref_words), 1)
+        forward_ent   = result["entailment"]
+        # grade_single stores forward_ent; approximate backward from nli_score
+        backward_ent  = result.get("backward_ent", forward_ent)
+        direction_gap = backward_ent - forward_ent
+
         X.append([
             result["similarity"],
-            result["entailment"],
+            forward_ent,
+            backward_ent,
+            direction_gap,
             result["coverage"],
-            result["length_ratio"]
+            result["wrong_ratio"],
+            result["length_ratio"],
+            lex_overlap,
         ])
 
         y.append(float(row["human_score"]))
