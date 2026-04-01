@@ -172,6 +172,7 @@ def submission_detail(
             "coverage":         ans.coverage or 0,
             "length_ratio":     ans.length_ratio or 0,
             "confidence":       ans.confidence or 0,
+            "rf_score":         ans.rf_score,
             "feedback":         ans.feedback,
             "concept_data":     concept_data,
             "concept_heatmap":  concept_data,
@@ -340,6 +341,7 @@ Tell the student what they got right, what they missed, and how to improve.
             ans.coverage         = result["coverage"]
             ans.length_ratio     = result["length_ratio"]
             ans.confidence       = result["confidence"]
+            ans.rf_score         = result.get("rf_score")
             ans.feedback         = feedback
             ans.concept_data     = {
                 "covered":         covered,

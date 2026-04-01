@@ -88,6 +88,7 @@ class Answer(Base):
     coverage = Column(Float, nullable=True)
     length_ratio = Column(Float, nullable=True)
     confidence = Column(Float, nullable=True)
+    rf_score   = Column(Float, nullable=True)   # RF predicted human score (0–max_score)
 
     feedback = Column(Text, nullable=True)
     concept_data = Column(JSON, nullable=True)

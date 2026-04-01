@@ -1,0 +1,25 @@
+
+============================================================
+   THESIS EVALUATION — ANOVA RESULTS
+============================================================
+  F-statistic      : 352.1699
+  p-value          : 0.00000000  (< 0.0001)
+  Eta-squared (n2) : 0.9791
+  Cohen's f        : 6.8524
+  Pearson r        : 0.9903
+  Decision         : REJECT H0
+
+  Per-scenario stats:
+  Scenario             Mean    Std    MAE
+  ----------------------------------------
+  Fully Correct        8.72   0.29 0.7771
+  Above Average        7.04   0.32 0.4900
+  Average              5.80   0.27 0.3286
+  Below Average        4.14   0.29 0.6429
+  Fully Wrong          3.56   0.19 2.0571
+
+  Overall MAE: 0.8591
+
+  Pairwise t-tests (Bonferroni corrected, n_pairs=10):
+  Pair                                        Corrected p   Sig?
+  --------------------------------------------------------------

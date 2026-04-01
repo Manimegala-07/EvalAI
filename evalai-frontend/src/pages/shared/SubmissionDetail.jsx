@@ -72,7 +72,7 @@ function OverridePanel({ answers, submissionId, token, t, onSaved }) {
       <div className="alert alert-info mb-4" style={{ fontSize: 13 }}>{t("override_info")}</div>
       {answers.map((a, i) => (
         <div key={a.question_id} style={{ borderBottom: "1px solid var(--border)", paddingBottom: 16, marginBottom: 16 }}>
-                    <div className="text-sm font-600 mb-2">Q{i + 1}: {getQ(a)?.slice(0, 80)}...</div>
+                    <div className="text-sm font-600 mb-2">Q{i + 1}: {a.question_text?.slice(0, 80)}...</div>
           <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
             <span className="badge badge-blue">{t("ai_score")}: {a.score} / {a.max_score}</span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -282,10 +282,13 @@ export default function SubmissionDetail({ submission, setPage, backLabel, onBac
 
               {/* AI scoring signals */}
               <div className="text-xs text-muted font-600" style={{ textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>{t("ai_scoring")}</div>
+
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 24px", marginBottom: 14 }}>
                 <HeatmapBar label={t("similarity")}  value={a.similarity} />
                 <HeatmapBar label={t("entailment")}  value={a.entailment} />
                 <HeatmapBar label={t("coverage")}    value={a.coverage}   />
+                <HeatmapBar label={t("confidence")}  value={a.confidence} />
               </div>
 
               {/* Sentence heatmap */}

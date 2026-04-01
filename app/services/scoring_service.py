@@ -482,35 +482,36 @@ class ScoringService:
     # ─────────────────────────────────────────────────────────
 
     def compute_confidence(self, similarity, forward_ent, backward_ent,
-                           coverage, wrong_ratio, length_ratio, lexical_overlap):
+                           coverage, wrong_ratio, length_ratio, lexical_overlap,
+                           pipeline_score=0, max_score=10):
 
-        # ── DEBUG ──────────────────────────────────────────
         _sep("CONFIDENCE SCORE COMPUTATION")
-        print(f"  Input features to Random Forest:")
-        print(f"    similarity      : {round(similarity,4):.4f}")
-        print(f"    forward_ent     : {round(forward_ent,4):.4f}")
-        print(f"    backward_ent    : {round(backward_ent,4):.4f}")
-        print(f"    direction_gap   : {round(abs(backward_ent-forward_ent),4):.4f}")
-        print(f"    coverage        : {round(coverage,4):.4f}")
-        print(f"    wrong_ratio     : {round(wrong_ratio,4):.4f}")
-        print(f"    length_ratio    : {round(length_ratio,4):.4f}")
-        print(f"    lexical_overlap : {round(lexical_overlap,4):.4f}")
-        # ───────────────────────────────────────────────────
 
         if self.calibrator is None:
             confidence = round((similarity + forward_ent + coverage) / 3, 4)
-            print(f"  ⚠️  No calibrator → fallback formula: (sim+ent+cov)/3 = {confidence}")
-            return confidence
+            print(f"  No calibrator -> fallback: (sim+ent+cov)/3 = {confidence}")
+            return confidence, None
 
         direction_gap = backward_ent - forward_ent
         features = np.array([[
             similarity, forward_ent, backward_ent, direction_gap,
             coverage, wrong_ratio, length_ratio, lexical_overlap
         ]])
-        confidence = float(self.calibrator.predict(features)[0])
-        confidence = round(min(max(confidence, 0.0), 1.0), 4)
-        print(f"  ✅ Random Forest predicted confidence : {confidence}")
-        return confidence
+
+        # RF predicts what a human would score (0-max_score scale)
+        predicted_human = float(self.calibrator.predict(features)[0])
+        predicted_human = max(0.0, min(predicted_human, max_score))
+
+        # Confidence = agreement between pipeline score and RF predicted score
+        pipeline_ratio = pipeline_score / max_score if max_score else 0
+        rf_ratio       = predicted_human / max_score if max_score else 0
+        agreement      = 1.0 - abs(pipeline_ratio - rf_ratio)
+        confidence     = round(max(0.0, min(agreement, 1.0)), 4)
+
+        print(f"  Pipeline score : {pipeline_score}/{max_score} ({round(pipeline_ratio*100,1)}%)")
+        print(f"  RF predicted   : {round(predicted_human,2)}/{max_score} ({round(rf_ratio*100,1)}%)")
+        print(f"  Agreement      : {confidence} ({round(confidence*100,1)}%)")
+        return confidence, round(predicted_human, 2)
 
     # ─────────────────────────────────────────────────────────
     # GRADE SINGLE — MAIN PIPELINE ENTRY POINT
@@ -568,12 +569,14 @@ class ScoringService:
         # Detect if translation happened
         is_translated = translation_info["was_translated"]
 
-        if is_translated:
-            # Already in English → safe
+        # skip_translation=True means both ref and student are same language → NLI directly
+        if skip_translation:
+            nli_ref = reference
+            nli_stu = student_for_nli
+        elif is_translated:
             nli_ref = reference
             nli_stu = student_for_nli
         else:
-            # Tamil path → force translation ONLY for NLI
             nli_ref = translate_to_english(reference)["translated"]
             nli_stu = translate_to_english(student_for_nli)["translated"]
 
@@ -660,9 +663,10 @@ class ScoringService:
         print(f"\n  🏆 FINAL SCORE = {round(final_ratio,4)} × {max_score} = {final_score}")
         
         # ── STEP 7: Confidence ────────────────────────────────
-        confidence = self.compute_confidence(
+        confidence, rf_predicted = self.compute_confidence(
             similarity, forward_ent, backward_ent,
-            coverage, wrong_ratio, length_ratio, lexical_overlap
+            coverage, wrong_ratio, length_ratio, lexical_overlap,
+            pipeline_score=final_score, max_score=max_score
         )
 
         # ── STEP 8: Sentence Heatmap ──────────────────────────
@@ -690,6 +694,7 @@ class ScoringService:
             "length_ratio":     round(length_ratio, 4),
             "wrong_ratio":      round(wrong_ratio, 4),
             "confidence":       confidence,
+            "rf_score":         rf_predicted,
             "concept_results":  concept_results,
             "sentence_heatmap": sent_heatmap,
             "translation_info": translation_info,
