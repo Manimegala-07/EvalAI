@@ -1,5 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # loads .env file
+
 from app.db.database import Base, engine
 from app.api import (
     test_routes,
