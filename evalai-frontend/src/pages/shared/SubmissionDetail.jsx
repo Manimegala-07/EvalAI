@@ -5,6 +5,37 @@ import api from "../../services/apiClient";
 import { BASE } from "../../services/apiClient";
 import HeatmapBar from "../../components/HeatmapBar";
 
+// ── Reference answer panel (teacher only) ──────────────────
+function ReferencePanel({ ref_en, ref_ta, ref_hi, qid }) {
+  const [tab, setTab] = useState("en");
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div className="text-xs text-muted font-600" style={{ textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+        📚 Reference Answer
+      </div>
+      <div style={{ background: "var(--accent-light)", borderRadius: 8, padding: "12px 16px", border: "1px solid var(--accent-soft)" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          {[{ id: "en", label: "🇬🇧 EN" }, { id: "ta", label: "🇮🇳 Tamil" }, { id: "hi", label: "🇮🇳 Hindi" }].map(tb => (
+            <button key={tb.id} onClick={() => setTab(tb.id)}
+              style={{
+                padding: "4px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                background: tab === tb.id ? "var(--accent)" : "var(--white)",
+                color: tab === tb.id ? "white" : "var(--ink-muted)",
+              }}>
+              {tb.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: 13.5, color: "var(--ink)", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>
+          {tab === "en" && (ref_en || <em style={{ color: "var(--ink-muted)" }}>Not available</em>)}
+          {tab === "ta" && (ref_ta || <em style={{ color: "var(--ink-muted)" }}>Tamil reference not available</em>)}
+          {tab === "hi" && (ref_hi || <em style={{ color: "var(--ink-muted)" }}>Hindi reference not available</em>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Concept heatmap pill ─────────────────────────────────────
 function ConceptPill({ concept, status }) {
   const colors = {
@@ -279,6 +310,11 @@ export default function SubmissionDetail({ submission, setPage, backLabel, onBac
               <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.75, background: "var(--cream)", padding: "12px 16px", borderRadius: 8, marginBottom: 14 }}>
                 {a.student_answer || <em style={{ color: "var(--ink-muted)" }}>{t("no_data")}</em>}
               </div>
+
+              {/* Reference answer — teacher only */}
+              {showOverride && a.reference_answers && (
+                <ReferencePanel ref_en={a.reference_answers.en} ref_ta={a.reference_answers.ta} ref_hi={a.reference_answers.hi} qid={a.question_id} />
+              )}
 
               {/* AI scoring signals */}
               <div className="text-xs text-muted font-600" style={{ textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>{t("ai_scoring")}</div>

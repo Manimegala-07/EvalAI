@@ -177,6 +177,11 @@ def submission_detail(
             "concept_data":     concept_data,
             "concept_heatmap":  concept_data,
             "sentence_heatmap": ans.sentence_heatmap or [],
+            "reference_answers": {
+                "en": question.model_answer    if question else None,
+                "ta": question.model_answer_ta if question else None,
+                "hi": question.model_answer_hi if question else None,
+            },
         })
 
     percentage = round(

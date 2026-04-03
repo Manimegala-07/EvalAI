@@ -129,6 +129,8 @@ export default function QuestionBank() {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
+  const [refTab, setRefTab] = useState({});
 
   const fetchQuestions = async (q = "") => {
     setLoading(true);
@@ -162,14 +164,41 @@ export default function QuestionBank() {
           <div className="empty-state"><div className="icon">❓</div><p>No questions found. Add your first question!</p></div>
         ) : (
           data.items.map(q => (
-            <div className="q-card" key={q.id}>
+            <div className="q-card" key={q.id} style={{ cursor: "pointer" }}
+              onClick={() => setExpandedId(expandedId === q.id ? null : q.id)}>
               <div className="flex justify-between items-start">
                 <div style={{ flex: 1 }}>
                   <div className="q-text">{q.text}</div>
-                  <div className="q-answer">{q.model_answer}</div>
+                  {expandedId !== q.id && <div className="q-answer">{q.model_answer}</div>}
                 </div>
-                <span className="badge badge-blue" style={{ marginLeft: 12, flexShrink: 0 }}>Q#{q.id}</span>
+                <div className="flex items-center gap-2" style={{ marginLeft: 12, flexShrink: 0 }}>
+                  <span className="badge badge-blue">Q#{q.id}</span>
+                  <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{expandedId === q.id ? "▲" : "▼"}</span>
+                </div>
               </div>
+
+              {expandedId === q.id && (
+                <div style={{ marginTop: 16 }} onClick={e => e.stopPropagation()}>
+                  <div className="tabs" style={{ marginBottom: 12 }}>
+                    {[
+                      { id: "en", label: "🇬🇧 English" },
+                      { id: "ta", label: "🇮🇳 Tamil" },
+                      { id: "hi", label: "🇮🇳 Hindi" },
+                    ].map(tb => (
+                      <button key={tb.id}
+                        className={`tab-btn ${(refTab[q.id] || "en") === tb.id ? "active" : ""}`}
+                        onClick={() => setRefTab(prev => ({ ...prev, [q.id]: tb.id }))}>
+                        {tb.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.75, background: "var(--cream)", padding: "14px 16px", borderRadius: 8, whiteSpace: "pre-wrap" }}>
+                    {(refTab[q.id] || "en") === "en" && (q.model_answer || <em style={{ color: "var(--ink-muted)" }}>Not set</em>)}
+                    {(refTab[q.id] || "en") === "ta" && (q.model_answer_ta || <em style={{ color: "var(--ink-muted)" }}>Tamil reference not available</em>)}
+                    {(refTab[q.id] || "en") === "hi" && (q.model_answer_hi || <em style={{ color: "var(--ink-muted)" }}>Hindi reference not available</em>)}
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}
