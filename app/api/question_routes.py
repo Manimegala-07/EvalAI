@@ -38,6 +38,9 @@ def list_questions(
                 "model_answer":    qu.model_answer,
                 "model_answer_ta": qu.model_answer_ta,
                 "model_answer_hi": qu.model_answer_hi,
+                "difficulty":      qu.difficulty,
+                "blooms_level":    qu.blooms_level,
+                "co_mapping":      qu.co_mapping,
                 "created_at":     qu.created_at,
             }
             for qu in questions
@@ -69,6 +72,9 @@ def create_question(
         model_answer_ta = tamil_answer,
         model_answer_hi = hindi_answer,
         teacher_id     = user.id,
+        difficulty     = data.get("difficulty"),
+        blooms_level   = data.get("blooms_level"),
+        co_mapping     = data.get("co_mapping"),
     )
     db.add(question)
     db.commit()

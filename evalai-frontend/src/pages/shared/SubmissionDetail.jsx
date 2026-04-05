@@ -324,7 +324,6 @@ export default function SubmissionDetail({ submission, setPage, backLabel, onBac
                 <HeatmapBar label={t("similarity")}  value={a.similarity} />
                 <HeatmapBar label={t("entailment")}  value={a.entailment} />
                 <HeatmapBar label={t("coverage")}    value={a.coverage}   />
-                <HeatmapBar label={t("confidence")}  value={a.confidence} />
               </div>
 
               {/* Sentence heatmap */}

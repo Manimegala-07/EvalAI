@@ -201,6 +201,109 @@ def submission_detail(
 
 
 # ======================================================
+# TEACHER: EVALUATE SINGLE SUBMISSION
+# ======================================================
+
+@router.post("/evaluate-single/{submission_id}")
+def evaluate_single_submission(
+    submission_id: int,
+    user=Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    from app.services.translation_service import detect_language
+
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    test = db.query(Test).filter(
+        Test.id == submission.test_id,
+        Test.teacher_id == user.id,
+    ).first()
+    if not test:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if submission.status == "evaluated":
+        return {"message": "Already evaluated", "evaluated_count": 1}
+
+    scorer = ScoringService()
+    llm    = LLMService()
+    answers = db.query(Answer).filter(Answer.submission_id == submission.id).all()
+    total_score = 0.0
+
+    for ans in answers:
+        question = db.query(Question).filter(Question.id == ans.question_id).first()
+        if not question:
+            continue
+
+        mapping = db.query(TestQuestion).filter(
+            TestQuestion.test_id == submission.test_id,
+            TestQuestion.question_id == ans.question_id,
+        ).first()
+        max_score = mapping.max_score if mapping else 10
+
+        student_text = (ans.student_answer or "").strip()
+        if not student_text or len(student_text.split()) < 3:
+            ans.score    = 0.0
+            ans.feedback = "No meaningful answer provided."
+            ans.concept_data = {"covered": [], "partial": [], "missing": [], "wrong": [], "concept_details": [], "coverage": 0.0, "wrong_ratio": 0.0, "status": "weak"}
+            continue
+
+        lang_info     = detect_language(student_text)
+        detected_lang = lang_info.get("lang_code", "en")
+        ans.detected_language = detected_lang
+
+        if detected_lang == "ta" and question.model_answer_ta:
+            reference = question.model_answer_ta
+            skip_translation = True
+        elif detected_lang == "hi" and question.model_answer_hi:
+            reference = question.model_answer_hi
+            skip_translation = True
+        else:
+            reference = question.model_answer
+            skip_translation = False
+
+        result = scorer.grade_single(reference, student_text, max_score=max_score, skip_translation=skip_translation)
+        score           = result["score"]
+        concept_results = result["concept_results"]
+        total_score    += score
+
+        covered = [c["concept"] for c in concept_results if c["status"] == "matched"]
+        partial = [c["concept"] for c in concept_results if c["status"] == "partial"]
+        missing = [c["concept"] for c in concept_results if c["status"] == "missing"]
+        wrong   = [c["concept"] for c in concept_results if c["status"] == "wrong"]
+        concept_details = [{"concept": c["concept"], "status": c["status"], "coverage": c["coverage"], "covered_kws": c.get("covered_kws", []), "missing_kws": c.get("missing_kws", [])} for c in concept_results]
+
+        prompt = f"""You are an academic evaluator giving feedback to a student.
+Question: {question.text}
+Student Answer: {student_text}
+Score: {score} / {max_score}
+Concepts correctly covered: {chr(10).join(f'- {c}' for c in covered) or '- None'}
+Concepts missing: {chr(10).join(f'- {c}' for c in missing) or '- None'}
+Write 3-5 sentences of constructive feedback in the same language as the student answer ({detected_lang})."""
+        try:
+            feedback = llm.model.generate_content(prompt).text
+        except Exception:
+            feedback = f"Score: {score}/{max_score}. {'Well done on: ' + '; '.join(covered[:2]) + '.' if covered else ''} {'Missed: ' + '; '.join(missing[:2]) + '.' if missing else ''}"
+
+        ans.score            = score
+        ans.similarity       = result["similarity"]
+        ans.entailment       = result["entailment"]
+        ans.coverage         = result["coverage"]
+        ans.length_ratio     = result["length_ratio"]
+        ans.confidence       = result["confidence"]
+        ans.rf_score         = result.get("rf_score")
+        ans.feedback         = feedback
+        ans.concept_data     = {"covered": covered, "partial": partial, "missing": missing, "wrong": wrong, "concept_details": concept_details, "coverage": result["coverage"], "wrong_ratio": result["wrong_ratio"], "status": "strong" if result["coverage"] > 0.65 else "partial" if result["coverage"] > 0.35 else "weak"}
+        ans.sentence_heatmap = result["sentence_heatmap"]
+
+    submission.total_score = round(total_score, 2)
+    submission.status      = "evaluated"
+    db.commit()
+    return {"message": "Evaluation completed", "evaluated_count": 1, "total_score": submission.total_score}
+
+
+# ======================================================
 # BATCH EVALUATION
 # ======================================================
 

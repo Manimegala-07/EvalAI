@@ -29,6 +29,9 @@ class Test(Base):
     time_limit_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # CO Outcomes defined per test
+    co_outcomes = Column(JSON, nullable=True)  # {"CO1": "desc", "CO2": "desc", ...}
+
     questions = relationship("TestQuestion", backref="test", lazy="dynamic")
     submissions = relationship("Submission", backref="test", lazy="dynamic")
 
@@ -47,6 +50,11 @@ class Question(Base):
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # ── Bloom's Taxonomy & Difficulty ───────────────────
+    difficulty   = Column(Integer, nullable=True)   # 1=Very Easy, 2=Easy, 3=Average, 4=Hard, 5=Very Hard
+    blooms_level = Column(String, nullable=True)    # L1=Remember, L2=Understand, L3=Apply, L4=Analyze, L5=Evaluate, L6=Create
+    co_mapping   = Column(String, nullable=True)    # CO1-CO6
+
 
 class TestQuestion(Base):
     __tablename__ = "test_questions"
@@ -55,6 +63,7 @@ class TestQuestion(Base):
     test_id = Column(Integer, ForeignKey("tests.id"), nullable=False)
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
     max_score = Column(Float, nullable=False, default=10.0)
+    co_mapping = Column(String, nullable=True)  # CO1-CO6 for this test
 
 
 class Submission(Base):

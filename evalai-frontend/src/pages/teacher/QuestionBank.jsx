@@ -4,13 +4,45 @@ import api from "../../services/apiClient";
 
 function CreateQuestionModal({ onClose }) {
   const { token } = useAuth();
-  const [form, setForm] = useState({ text: "", model_answer: "", model_answer_ta: "", model_answer_hi: "" });
+  const [form, setForm] = useState({ text: "", model_answer: "", model_answer_ta: "", model_answer_hi: "", difficulty: "", blooms_level: "", co_mapping: "" });
   const [validation, setValidation] = useState(null);
   const [validating, setValidating] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("english");
+
+  const DIFFICULTY_LEVELS = [
+    { value: 1, label: "1 - Very Easy" },
+    { value: 2, label: "2 - Easy" },
+    { value: 3, label: "3 - Average" },
+    { value: 4, label: "4 - Hard" },
+    { value: 5, label: "5 - Very Hard" },
+  ];
+
+  const BLOOMS_LEVELS = [
+    { value: "L1", label: "L1 - Remember (What is...)" },
+    { value: "L2", label: "L2 - Understand (Explain...)" },
+    { value: "L3", label: "L3 - Apply (How to use...)" },
+    { value: "L4", label: "L4 - Analyze (Compare/Break down...)" },
+    { value: "L5", label: "L5 - Evaluate (Justify/Assess...)" },
+    { value: "L6", label: "L6 - Create (Design/Develop...)" },
+  ];
+
+  const CO_OPTIONS = [
+    { value: "CO1", label: "CO1" }, { value: "CO2", label: "CO2" },
+    { value: "CO3", label: "CO3" }, { value: "CO4", label: "CO4" },
+    { value: "CO5", label: "CO5" }, { value: "CO6", label: "CO6" },
+  ];
+
+  const BLOOMS_HINTS = {
+    L1: "Start with: What is / Define / List / Name",
+    L2: "Start with: Explain / Describe / Summarize",
+    L3: "Start with: How would you / Apply / Use",
+    L4: "Start with: Compare / Analyze / Break down",
+    L5: "Start with: Evaluate / Justify / Assess",
+    L6: "Start with: Design / Create / Develop",
+  };
 
   const autoTranslate = async () => {
     if (!form.model_answer.trim()) return;
@@ -54,8 +86,37 @@ function CreateQuestionModal({ onClose }) {
           {error && <div className="alert alert-error">{error}</div>}
           <div className="form-group">
             <label className="form-label">Question Text</label>
+            {form.blooms_level && (
+              <div className="alert alert-info" style={{ fontSize: 12, padding: "6px 12px", marginBottom: 8 }}>
+                💡 {BLOOMS_HINTS[form.blooms_level]}
+              </div>
+            )}
             <textarea className="form-textarea" placeholder="Enter your question..."
               value={form.text} onChange={e => setForm({ ...form, text: e.target.value })} />
+          </div>
+
+          <div className="grid-3" style={{ marginBottom: 20 }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Difficulty Level</label>
+              <select className="form-select" value={form.difficulty} onChange={e => setForm({ ...form, difficulty: e.target.value })}>
+                <option value="">-- Select --</option>
+                {DIFFICULTY_LEVELS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Bloom&apos;s Level</label>
+              <select className="form-select" value={form.blooms_level} onChange={e => setForm({ ...form, blooms_level: e.target.value })}>
+                <option value="">-- Select --</option>
+                {BLOOMS_LEVELS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">CO Mapping</label>
+              <select className="form-select" value={form.co_mapping} onChange={e => setForm({ ...form, co_mapping: e.target.value })}>
+                <option value="">-- Select --</option>
+                {CO_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
           </div>
           <div className="tabs">
             {[{ id: "english", label: "🇬🇧 English Reference" }, { id: "tamil", label: "🇮🇳 Tamil Reference" }, { id: "hindi", label: "🇮🇳 Hindi Reference" }].map(t => (
@@ -172,6 +233,9 @@ export default function QuestionBank() {
                   {expandedId !== q.id && <div className="q-answer">{q.model_answer}</div>}
                 </div>
                 <div className="flex items-center gap-2" style={{ marginLeft: 12, flexShrink: 0 }}>
+                  {q.difficulty && <span className="badge badge-amber">D{q.difficulty}</span>}
+                  {q.blooms_level && <span className="badge badge-blue">{q.blooms_level}</span>}
+                  {q.co_mapping && <span className="badge badge-green">{q.co_mapping}</span>}
                   <span className="badge badge-blue">Q#{q.id}</span>
                   <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{expandedId === q.id ? "▲" : "▼"}</span>
                 </div>
