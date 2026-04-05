@@ -184,11 +184,166 @@ function CreateQuestionModal({ onClose }) {
   );
 }
 
+function EditQuestionModal({ question, onClose }) {
+  const { token } = useAuth();
+  const [form, setForm] = useState({
+    text: question.text || "",
+    model_answer: question.model_answer || "",
+    model_answer_ta: question.model_answer_ta || "",
+    model_answer_hi: question.model_answer_hi || "",
+    difficulty: question.difficulty || "",
+    blooms_level: question.blooms_level || "",
+    co_mapping: question.co_mapping || "",
+  });
+  const [translating, setTranslating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("english");
+  const [success, setSuccess] = useState("");
+
+  const DIFFICULTY_LEVELS = [
+    { value: 1, label: "1 - Very Easy" }, { value: 2, label: "2 - Easy" },
+    { value: 3, label: "3 - Average" },   { value: 4, label: "4 - Hard" },
+    { value: 5, label: "5 - Very Hard" },
+  ];
+  const BLOOMS_LEVELS = [
+    { value: "L1", label: "L1 - Remember" }, { value: "L2", label: "L2 - Understand" },
+    { value: "L3", label: "L3 - Apply" },    { value: "L4", label: "L4 - Analyze" },
+    { value: "L5", label: "L5 - Evaluate" }, { value: "L6", label: "L6 - Create" },
+  ];
+  const CO_OPTIONS = [
+    { value: "CO1", label: "CO1" }, { value: "CO2", label: "CO2" },
+    { value: "CO3", label: "CO3" }, { value: "CO4", label: "CO4" },
+    { value: "CO5", label: "CO5" }, { value: "CO6", label: "CO6" },
+  ];
+
+  const autoTranslate = async () => {
+    if (!form.model_answer.trim()) return;
+    setTranslating(true);
+    try {
+      const [ta, hi] = await Promise.all([
+        api.post("/translate/question", { text: form.model_answer, target_lang: "ta" }),
+        api.post("/translate/question", { text: form.model_answer, target_lang: "hi" }),
+      ]);
+      setForm(f => ({ ...f, model_answer_ta: ta.translated, model_answer_hi: hi.translated }));
+      setSuccess("Auto-translated successfully!");
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (e) { setError("Translation failed: " + e.message); }
+    setTranslating(false);
+  };
+
+  const save = async () => {
+    if (!form.text || !form.model_answer) { setError("Question and English reference are required"); return; }
+    setSaving(true);
+    try {
+      await api.put(`/questions/${question.id}`, form, token);
+      onClose();
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 660 }}>
+        <div className="modal-header">
+          <h3>✏️ Edit Question #{question.id}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          {error   && <div className="alert alert-error">{error}</div>}
+          {success && <div className="alert alert-success">{success}</div>}
+
+          <div className="form-group">
+            <label className="form-label">Question Text</label>
+            <textarea className="form-textarea" value={form.text}
+              onChange={e => setForm({ ...form, text: e.target.value })} />
+          </div>
+
+          <div className="grid-3" style={{ marginBottom: 20 }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Difficulty</label>
+              <select className="form-select" value={form.difficulty} onChange={e => setForm({ ...form, difficulty: e.target.value })}>
+                <option value="">-- Select --</option>
+                {DIFFICULTY_LEVELS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Bloom&apos;s Level</label>
+              <select className="form-select" value={form.blooms_level} onChange={e => setForm({ ...form, blooms_level: e.target.value })}>
+                <option value="">-- Select --</option>
+                {BLOOMS_LEVELS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">CO Mapping</label>
+              <select className="form-select" value={form.co_mapping} onChange={e => setForm({ ...form, co_mapping: e.target.value })}>
+                <option value="">-- Select --</option>
+                {CO_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="tabs">
+            {[{ id: "english", label: "🇬🇧 English" }, { id: "tamil", label: "🇮🇳 Tamil" }, { id: "hindi", label: "🇮🇳 Hindi" }].map(t => (
+              <button key={t.id} className={`tab-btn ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>{t.label}</button>
+            ))}
+          </div>
+
+          {tab === "english" && (
+            <div className="form-group">
+              <label className="form-label">English Reference Answer</label>
+              <textarea className="form-textarea" value={form.model_answer}
+                onChange={e => setForm({ ...form, model_answer: e.target.value })} />
+              <button className="btn btn-secondary btn-sm mt-2" onClick={autoTranslate} disabled={translating}>
+                {translating ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Translating...</> : "🔄 Auto-translate to Tamil & Hindi"}
+              </button>
+            </div>
+          )}
+          {tab === "tamil" && (
+            <div className="form-group">
+              <div className="flex items-center justify-between mb-2">
+                <label className="form-label" style={{ margin: 0 }}>Tamil Reference Answer</label>
+                <button className="btn btn-secondary btn-sm" onClick={autoTranslate} disabled={translating}>
+                  {translating ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Translating...</> : "🔄 Re-translate"}
+                </button>
+              </div>
+              <textarea className="form-textarea" value={form.model_answer_ta}
+                onChange={e => setForm({ ...form, model_answer_ta: e.target.value })}
+                placeholder="Tamil reference — click Re-translate or type manually" />
+            </div>
+          )}
+          {tab === "hindi" && (
+            <div className="form-group">
+              <div className="flex items-center justify-between mb-2">
+                <label className="form-label" style={{ margin: 0 }}>Hindi Reference Answer</label>
+                <button className="btn btn-secondary btn-sm" onClick={autoTranslate} disabled={translating}>
+                  {translating ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Translating...</> : "🔄 Re-translate"}
+                </button>
+              </div>
+              <textarea className="form-textarea" value={form.model_answer_hi}
+                onChange={e => setForm({ ...form, model_answer_hi: e.target.value })}
+                placeholder="Hindi reference — click Re-translate or type manually" />
+            </div>
+          )}
+
+          <div className="flex gap-3 justify-end">
+            <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>
+              {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Saving...</> : "💾 Save Changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function QuestionBank() {
   const { token } = useAuth();
   const [data, setData] = useState({ total: 0, items: [] });
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [editQuestion, setEditQuestion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [refTab, setRefTab] = useState({});
@@ -237,6 +392,7 @@ export default function QuestionBank() {
                   {q.blooms_level && <span className="badge badge-blue">{q.blooms_level}</span>}
                   {q.co_mapping && <span className="badge badge-green">{q.co_mapping}</span>}
                   <span className="badge badge-blue">Q#{q.id}</span>
+                  <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); setEditQuestion(q); }}>✏️ Edit</button>
                   <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{expandedId === q.id ? "▲" : "▼"}</span>
                 </div>
               </div>
@@ -269,6 +425,7 @@ export default function QuestionBank() {
         </div>
       </div>
       {showCreate && <CreateQuestionModal onClose={() => { setShowCreate(false); fetchQuestions(search); }} />}
+      {editQuestion && <EditQuestionModal question={editQuestion} onClose={() => { setEditQuestion(null); fetchQuestions(search); }} />}
     </>
   );
 }

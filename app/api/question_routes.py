@@ -88,6 +88,32 @@ def create_question(
     }
 
 
+@router.put("/{question_id}")
+def update_question(
+    question_id: int,
+    data: dict,
+    user=Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    question = db.query(Question).filter(
+        Question.id == question_id,
+        Question.teacher_id == user.id,
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    if "text"           in data: question.text            = data["text"]
+    if "model_answer"   in data: question.model_answer    = data["model_answer"]
+    if "model_answer_ta" in data: question.model_answer_ta = data["model_answer_ta"]
+    if "model_answer_hi" in data: question.model_answer_hi = data["model_answer_hi"]
+    if "difficulty"     in data: question.difficulty      = data["difficulty"]
+    if "blooms_level"   in data: question.blooms_level    = data["blooms_level"]
+    if "co_mapping"     in data: question.co_mapping      = data["co_mapping"]
+
+    db.commit()
+    return {"message": "Question updated successfully"}
+
+
 @router.put("/{question_id}/translations")
 def update_translations(
     question_id: int,
