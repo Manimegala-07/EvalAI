@@ -12,7 +12,7 @@ router = APIRouter(prefix="/submissions", tags=["Submissions"])
 
 # ======================================================
 # STUDENT: SUBMIT TEST
-# ======================================================
+# ======================================================-+*67*
 
 @router.post("/submit-test")
 def submit_test(
@@ -174,6 +174,7 @@ def submission_detail(
             "confidence":       ans.confidence or 0,
             "rf_score":         ans.rf_score,
             "feedback":         ans.feedback,
+            "answer_breakdown": ans.answer_breakdown or {},
             "concept_data":     concept_data,
             "concept_heatmap":  concept_data,
             "sentence_heatmap": ans.sentence_heatmap or [],
@@ -286,6 +287,12 @@ Write 3-5 sentences of constructive feedback in the same language as the student
         except Exception:
             feedback = f"Score: {score}/{max_score}. {'Well done on: ' + '; '.join(covered[:2]) + '.' if covered else ''} {'Missed: ' + '; '.join(missing[:2]) + '.' if missing else ''}"
 
+        # ── Gemini Answer Breakdown ───────────────────────
+        answer_breakdown = llm.generate_answer_breakdown(
+            question.text, reference, student_text,
+            score, max_score, covered, missing, wrong
+        )
+
         ans.score            = score
         ans.similarity       = result["similarity"]
         ans.entailment       = result["entailment"]
@@ -294,6 +301,7 @@ Write 3-5 sentences of constructive feedback in the same language as the student
         ans.confidence       = result["confidence"]
         ans.rf_score         = result.get("rf_score")
         ans.feedback         = feedback
+        ans.answer_breakdown = answer_breakdown
         ans.concept_data     = {"covered": covered, "partial": partial, "missing": missing, "wrong": wrong, "concept_details": concept_details, "coverage": result["coverage"], "wrong_ratio": result["wrong_ratio"], "status": "strong" if result["coverage"] > 0.65 else "partial" if result["coverage"] > 0.35 else "weak"}
         ans.sentence_heatmap = result["sentence_heatmap"]
 
@@ -443,6 +451,12 @@ Tell the student what they got right, what they missed, and how to improve.
                     parts.append(f"Incorrect: {'; '.join(c[:80] for c in wrong[:2])}.")
                 feedback = " ".join(parts)
 
+            # ── Gemini Answer Breakdown ───────────────────────
+            answer_breakdown = llm.generate_answer_breakdown(
+                question.text, reference, student_text,
+                score, max_score, covered, missing, wrong
+            )
+
             ans.score            = score
             ans.similarity       = result["similarity"]
             ans.entailment       = result["entailment"]
@@ -451,6 +465,7 @@ Tell the student what they got right, what they missed, and how to improve.
             ans.confidence       = result["confidence"]
             ans.rf_score         = result.get("rf_score")
             ans.feedback         = feedback
+            ans.answer_breakdown = answer_breakdown
             ans.concept_data     = {
                 "covered":         covered,
                 "partial":         partial,

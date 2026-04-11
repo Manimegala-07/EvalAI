@@ -9,33 +9,15 @@ class ModelService:
 
     @classmethod
     def get_model(cls):
-
         if cls._model is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
-
-            # ── DEBUG ──────────────────────────────────────
             print(f"\n{'═'*62}")
-            print(f"  🧠 ModelService — Loading Sentence Transformer")
-            print(f"  💻 Device      : {device}")
-            print(f"  📦 Model path  : {config.MODEL_PATH}")
+            print(f"  🧠 Loading Sentence Transformer — {config.MODEL_PATH}")
+            print(f"  💻 Device: {device}")
             print(f"{'═'*62}")
-            # ───────────────────────────────────────────────
-
-            cls._model = SentenceTransformer(
-                config.MODEL_PATH,
-                device=device
-            )
-
-            # ── DEBUG ──────────────────────────────────────
-            print(f"  ✅ Model loaded successfully!")
-            print(f"  📐 Embedding dimension : {cls._model.get_sentence_embedding_dimension()}")
-            print(f"  📊 Max sequence length : {cls._model.max_seq_length}")
+            cls._model = SentenceTransformer(config.MODEL_PATH, device=device)
+            print(f"  ✅ Model loaded | Embedding dim: {cls._model.get_sentence_embedding_dimension()} | Max seq: {cls._model.max_seq_length}")
             print(f"{'═'*62}\n")
-            # ───────────────────────────────────────────────
-
         else:
-            # ── DEBUG ──────────────────────────────────────
-            print(f"  ♻️  ModelService — reusing cached model (already loaded)")
-            # ───────────────────────────────────────────────
-
+            print(f"  ♻️  Sentence Transformer — reusing cached model")
         return cls._model

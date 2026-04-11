@@ -326,18 +326,90 @@ export default function SubmissionDetail({ submission, setPage, backLabel, onBac
                 <HeatmapBar label={t("coverage")}    value={a.coverage}   />
               </div>
 
-              {/* Sentence heatmap */}
-              {a.sentence_heatmap?.length > 0 && (
-                <>
-                  <div className="text-xs text-muted font-600" style={{ textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-                    {t("answer_breakdown")}
+              {/* Gemini Answer Breakdown */}
+              {(() => {
+                const bd = a.answer_breakdown || {};
+                const correct = bd.correct_points || [];
+                const wrong   = bd.wrong_points   || [];
+                const missing = bd.missing_points || [];
+                const summary = bd.summary        || "";
+                if (!correct.length && !wrong.length && !missing.length) return null;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="text-xs text-muted font-600" style={{ textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+                      🧠 AI-Generated Answer Analysis
+                    </div>
+
+                    {/* Summary banner */}
+                    {summary && (
+                      <div style={{
+                        background: "linear-gradient(135deg, #EEF2FF 0%, #F8F0FF 100%)",
+                        border: "1px solid var(--accent-soft)",
+                        borderRadius: 8, padding: "10px 16px", marginBottom: 14,
+                        fontSize: 13.5, color: "var(--ink)", lineHeight: 1.6, fontStyle: "italic"
+                      }}>
+                        “{summary}”
+                      </div>
+                    )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: correct.length && (wrong.length || missing.length) ? "1fr 1fr" : "1fr", gap: 12 }}>
+
+                      {/* Correct Points */}
+                      {correct.length > 0 && (
+                        <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "12px 14px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                            <span style={{ fontSize: 16 }}>✅</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#16A34A", textTransform: "uppercase", letterSpacing: "0.08em" }}>Correctly Stated</span>
+                          </div>
+                          {correct.map((p, pi) => (
+                            <div key={pi} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+                              <span style={{ color: "#16A34A", fontSize: 12, flexShrink: 0, marginTop: 2 }}>●</span>
+                              <span style={{ fontSize: 13, color: "#166534", lineHeight: 1.55 }}>{p}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Wrong + Missing stacked */}
+                      {(wrong.length > 0 || missing.length > 0) && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                          {wrong.length > 0 && (
+                            <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "12px 14px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                                <span style={{ fontSize: 16 }}>❌</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#DC2626", textTransform: "uppercase", letterSpacing: "0.08em" }}>Factual Errors</span>
+                              </div>
+                              {wrong.map((p, pi) => (
+                                <div key={pi} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+                                  <span style={{ color: "#DC2626", fontSize: 12, flexShrink: 0, marginTop: 2 }}>●</span>
+                                  <span style={{ fontSize: 13, color: "#991B1B", lineHeight: 1.55 }}>{p}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {missing.length > 0 && (
+                            <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "12px 14px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                                <span style={{ fontSize: 16 }}>⚠️</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#D97706", textTransform: "uppercase", letterSpacing: "0.08em" }}>Missing Concepts</span>
+                              </div>
+                              {missing.map((p, pi) => (
+                                <div key={pi} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+                                  <span style={{ color: "#D97706", fontSize: 12, flexShrink: 0, marginTop: 2 }}>●</span>
+                                  <span style={{ fontSize: 13, color: "#92400E", lineHeight: 1.55 }}>{p}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {a.sentence_heatmap.map((row, si) => (
-                    <SentenceRow key={si} {...row} t={t} />
-                  ))}
-                  <div style={{ marginBottom: 14 }} />
-                </>
-              )}
+                );
+              })()}
 
               {/* AI Feedback */}
               {a.feedback && (

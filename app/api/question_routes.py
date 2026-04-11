@@ -97,7 +97,6 @@ def update_question(
 ):
     question = db.query(Question).filter(
         Question.id == question_id,
-        Question.teacher_id == user.id,
     ).first()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")

@@ -208,16 +208,16 @@ std_diff    = np.std(differences)
 loa_upper   = mean_diff + 1.96 * std_diff
 loa_lower   = mean_diff - 1.96 * std_diff
 
-print(f"\n{sep}")
-print("  8. BLAND-ALTMAN ANALYSIS")
-print(f"{sep}")
-print(f"  Mean Difference (Bias) : {mean_diff:+.4f}")
-print(f"  Std of Differences     : {std_diff:.4f}")
-print(f"  Upper Limit of Agreement (LoA) : {loa_upper:+.4f}")
-print(f"  Lower Limit of Agreement (LoA) : {loa_lower:+.4f}")
-bias_dir = "over-scores" if mean_diff > 0 else "under-scores"
-print(f"  Interpretation : AI {bias_dir} by {abs(mean_diff):.2f} points on average")
-print(f"  95% of differences fall between {loa_lower:.2f} and {loa_upper:.2f}")
+# print(f"\n{sep}")
+# print("  8. BLAND-ALTMAN ANALYSIS")
+# print(f"{sep}")
+# print(f"  Mean Difference (Bias) : {mean_diff:+.4f}")
+# print(f"  Std of Differences     : {std_diff:.4f}")
+# print(f"  Upper Limit of Agreement (LoA) : {loa_upper:+.4f}")
+# print(f"  Lower Limit of Agreement (LoA) : {loa_lower:+.4f}")
+# bias_dir = "over-scores" if mean_diff > 0 else "under-scores"
+# print(f"  Interpretation : AI {bias_dir} by {abs(mean_diff):.2f} points on average")
+# print(f"  95% of differences fall between {loa_lower:.2f} and {loa_upper:.2f}")
 
 # ══════════════════════════════════════════════════════════════
 # 9. SCORE CONSISTENCY (Std within same scenario)

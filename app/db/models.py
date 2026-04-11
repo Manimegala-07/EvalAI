@@ -102,3 +102,4 @@ class Answer(Base):
     feedback = Column(Text, nullable=True)
     concept_data = Column(JSON, nullable=True)
     sentence_heatmap = Column(JSON, nullable=True)
+    answer_breakdown = Column(JSON, nullable=True)  # Gemini structured breakdown
